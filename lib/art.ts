@@ -37,12 +37,12 @@ export type ArtObject = Motif | Icon;
 export const OBJECTS = [...MOTIFS, ...ICON_NAMES] as [ArtObject, ...ArtObject[]];
 const isMotif = (name: ArtObject): name is Motif => (MOTIFS as readonly string[]).includes(name);
 
-export const COMPOSITIONS = ["hero", "versus", "twist", "scale", "odd"] as const;
+export const COMPOSITIONS = ["hero", "versus", "twist", "scale", "odd", "peek"] as const;
 export const TWISTS = ["cross", "crack", "flip"] as const;
 export const words = (s: string | undefined) => (s ?? "").split(/\s+/).filter(Boolean).length;
 const PAIRED = new Set(["versus", "scale"]);
 
-// hero, twist and odd draw objects[0]; versus and scale draw both. Label and stamp together
+// hero, twist, odd and peek draw objects[0]; versus and scale draw both. Label and stamp together
 // carry at most three words.
 export const ArtSpec = z
   .object({
@@ -362,10 +362,13 @@ export function outline(d: string): Pt[] {
 
 // ---- layout ----
 
-// One object placed on the sheet, centred on x y.
-export type Cut = { name: ArtObject; x: number; y: number; size: number; rot: number; seed: number; red?: boolean; offset?: boolean; flip?: boolean; mirror?: boolean };
+// One object placed on the sheet: x y is the centre of its frame, not of its ink.
+export type Cut = { name: ArtObject; x: number; y: number; size: number; rot: number; seed: number; red?: boolean; offset?: boolean; flip?: boolean; mirror?: boolean; grow?: number };
 export type Box = { x0: number; y0: number; x1: number; y1: number };
-const hit = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+export const hit = (a: Box, b: Box, pad = 0) => a.x0 - pad < b.x1 && b.x0 - pad < a.x1 && a.y0 - pad < b.y1 && b.y0 - pad < a.y1;
+export const union = (bs: Box[]): Box => ({ x0: Math.min(...bs.map((b) => b.x0)), y0: Math.min(...bs.map((b) => b.y0)), x1: Math.max(...bs.map((b) => b.x1)), y1: Math.max(...bs.map((b) => b.y1)) });
+const boxOf = (p: Pt[]): Box => union(p.map(([x, y]) => ({ x0: x, y0: y, x1: x, y1: y })));
+const bw = (b: Box) => b.x1 - b.x0, bh = (b: Box) => b.y1 - b.y0;
 const edgeOf = (size: number) => Math.max(10, size * 0.03); // white sticker edge
 const offOf = (size: number) => Math.max(7, size * 0.022); // red offset
 
@@ -383,109 +386,215 @@ function placer(c: Cut, s: Silhouette) {
 }
 const rim = (c: Cut) => { const s = silhouette(c.name, c.size, c.seed); return outline(s.d).map(placer(c, s)); };
 
-// The canvas box a cut covers, sticker edge and red offset included.
+// The canvas box of the drawn object itself (its real path bounds, not its 256 frame), and
+// the box it covers with the sticker edge and red offset.
+export const inkBox = (c: Cut): Box => boxOf(rim(c));
 export function cutBox(c: Cut): Box {
-  const p = rim(c), m = edgeOf(c.size) / 2 + offOf(c.size), xs = p.map((q) => q[0]), ys = p.map((q) => q[1]);
-  return { x0: Math.min(...xs) - m, y0: Math.min(...ys) - m, x1: Math.max(...xs) + m, y1: Math.max(...ys) + m };
+  const b = inkBox(c), m = edgeOf(c.size) / 2 + offOf(c.size) + (c.grow ?? 0);
+  return { x0: b.x0 - m, y0: b.y0 - m, x1: b.x1 + m, y1: b.y1 + m };
 }
 
-// Layout, in canvas pixels. Everything sits on one torn sheet in the middle of the frame,
-// with the composition on the centre line, clear of the outer top and bottom edges.
-const SX = 170, SY = 78, SW = 1260, SH = 744; // the sheet
-const X0 = SX + 60, X1 = SX + SW - 60, CX = 800, CY = 460; // inner span and centre
-const BAND_Y = 150; // a note too wide for the side sits in a band over the composition
-const DROP = 60, BAND_K = 0.84; // which moves down and shrinks to make room
+// The filled area of the drawn object on the canvas: the shoelace area of each placed subpath,
+// signed, so a hole wound the other way subtracts. That is the ink a viewer sees, where the box
+// would count the empty middle of an open shape (headphones) as weight.
+// ponytail: overlapping subpaths wound the same way count twice (a motif's head on its body); fine for weighing.
+export function inkArea(c: Cut): number {
+  const s = silhouette(c.name, c.size, c.seed), at = placer(c, s);
+  let a = 0;
+  for (const sp of subpaths(s.d)) {
+    const p = outline(sp).map(at);
+    p.forEach((q, i) => { const n = p[(i + 1) % p.length]!; a += q[0] * n[1] - n[0] * q[1]; });
+  }
+  return Math.abs(a) / 2;
+}
+// Solid red paper reads heavier than the same area of halftone: the dots cover about half the
+// shape (measured 0.47 to 0.52 over a spread of objects) and the red is nearly as dark as ink, so in
+// versus the red side is weighed up by this factor.
+export const RED_WEIGHT = 1.6;
+export const weight = (c: Cut) => inkArea(c) * (c.red ? RED_WEIGHT : 1);
+
+// Scales c so its ink fits w x h. Twice, since a hand-drawn motif is only nearly linear in size.
+function fit(c: Cut, w: number, h: number): Cut {
+  for (let i = 0; i < 2; i++) { const b = inkBox(c); c.size *= Math.min(w / bw(b), h / bh(b)); }
+  return c;
+}
+// Moves c so the point at fractions fx fy of its ink box lands on x y.
+function pin(c: Cut, x: number, y: number, fx = 0.5, fy = 0.5): Cut {
+  const b = inkBox(c);
+  c.x += x - (b.x0 + bw(b) * fx);
+  c.y += y - (b.y0 + bh(b) * fy);
+  return c;
+}
+
+// The grid, in canvas pixels. One torn sheet in the middle of the frame; everything that
+// carries meaning sits inside AREA, one GRID unit in from the sheet's edges, which also keeps it
+// clear of the outer 8% at top and bottom that X crops. The composition (objects, flap and note)
+// is centred on the sheet's centre.
+const SX = 170, SY = 78, SW = 1260, SH = 744;
+export const SHEET_BOX: Box = { x0: SX, y0: SY, x1: SX + SW, y1: SY + SH };
+export const GRID = 64;
+export const AREA: Box = { x0: SX + GRID, y0: SY + GRID, x1: SX + SW - GRID, y1: SY + SH - GRID };
+export const CX = SX + SW / 2, CY = SY + SH / 2;
+export const SUBJECT = 470; // the subject's ink height at full size: 63% of the sheet
+const SIDE_W = 520, SIDE_GAP = 120, BAND_GAP = 110; // a note's width at the side, and its gap to the ink
+const VS_GAP = 180, SCALE_GAP = 140, ODD = 210, ODD_GAP = 72;
 export const LABEL_SIZE = 88; // pencil label, just under 1/10 of the image height
 export const LABEL_MIN = 76; // never below 1/12 of the image height
 export const STAMP_SIZE = 76;
 
-type Zone = { x0: number; x1: number; y: number; anchor: "start" | "end" | "middle" };
-type Note = { lines: string[]; size: number; lh: number; tx: number; top: number; z: Zone; box: Box };
+type Setting = { lines: string[]; size: number; lh: number; w: number; h: number };
+export type Note = { lines: string[]; size: number; lh: number; anchor: "start" | "end"; box: Box };
 
-// The pencil note's lines and box: as few lines as fit the zone, shrinking to LABEL_MIN.
-// Side zones are only used when the label fits them at LABEL_MIN; a band can shrink further,
-// which only an absurd 22-letter word needs.
-function noteLayout(text: string, z: Zone): Note {
-  const zw = z.x1 - z.x0;
-  let size = LABEL_SIZE, lines = wrap(text, size, zw);
-  while (widest(lines, size) > zw && size > 24) lines = wrap(text, (size -= 4), zw);
-  const lh = size * 1.02, blockH = size * 0.74 + (lines.length - 1) * lh, top = z.y - blockH / 2, tw = widest(lines, size);
-  const tx = z.anchor === "start" ? z.x0 : z.anchor === "end" ? z.x1 : (z.x0 + z.x1) / 2;
-  const x0 = z.anchor === "start" ? tx : z.anchor === "end" ? tx - tw : tx - tw / 2;
-  return { lines, size, lh, tx, top, z, box: { x0, y0: top, x1: x0 + tw, y1: top + blockH } };
+// The label set in as few lines as fit maxW, shrinking only when one word is too wide. Its
+// height runs from the ascenders to the descenders.
+function setNote(text: string, maxW: number): Setting {
+  let size = LABEL_SIZE, lines = wrap(text, size, maxW);
+  while (widest(lines, size) > maxW && size > 24) lines = wrap(text, (size -= 4), maxW);
+  const lh = size * 1.02;
+  return { lines, size, lh, w: widest(lines, size), h: size * 0.76 + (lines.length - 1) * lh + size * 0.24 };
 }
-const fits = (text: string, w: number) => widest(wrap(text, LABEL_MIN, w), LABEL_MIN) <= w;
+// The note with its anchored (flush) edge at x and its top at y.
+function noteAt(t: Setting, anchor: "start" | "end", x: number, y: number): Note {
+  const x0 = anchor === "start" ? x : x - t.w;
+  return { lines: t.lines, size: t.size, lh: t.lh, anchor, box: { x0, y0: y, x1: x0 + t.w, y1: y + t.h } };
+}
+
+// peek: a torn flap of paper taped over one side of the object. x y is its centre; side is
+// the side of the object it covers.
+export type Flap = { x: number; y: number; w: number; h: number; rot: number; side: 1 | -1 };
+const flapCorners = (f: Flap): Pt[] => {
+  const a = (f.rot * Math.PI) / 180, co = Math.cos(a), si = Math.sin(a);
+  return ([[-1, -1], [1, -1], [1, 1], [-1, 1]] as const).map(([u, v]): Pt => [f.x + (u * f.w * co - v * f.h * si) / 2, f.y + (u * f.w * si + v * f.h * co) / 2]);
+};
+export const flapBox = (f: Flap) => boxOf(flapCorners(f));
+// Points along the flap's edge, for the arrow to find its nearest side.
+const flapRim = (f: Flap): Pt[] => {
+  const c = flapCorners(f), out: Pt[] = [];
+  c.forEach((p, i) => { const q = c[(i + 1) % 4]!; for (let t = 0; t < 1; t += 0.05) out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]); });
+  return out;
+};
 
 type Stamp = { word: string; x: number; y: number; rot: number; bw: number; bh: number; box: Box };
+export type Plan = { cuts: Cut[]; target: number; note?: Note; stamp?: Stamp; flap?: Flap };
 
-// Where everything goes. Exported so the tests can check boxes without parsing the SVG.
-export function plan(spec: ArtSpec): { cuts: Cut[]; target: number; note?: Note; stamp?: Stamp } {
-  const { seed, composition } = spec, r = rng(seed * 131 + 17);
+// Everything a note, a stamp or another object must keep clear of.
+export const taken = (p: Plan): Box[] => [...p.cuts.map(cutBox), ...(p.flap ? [flapBox(p.flap)] : [])];
+// The composition: objects, flap and note together. It is what gets centred.
+export const compositionBox = (p: Plan): Box => union([...taken(p), ...(p.note ? [p.note.box] : [])]);
+
+type Dice = { left: boolean; tilt: number[]; n: number; pick: number; turn: number; flapTilt: number; stampRot: number };
+
+// The composition at scale k, laid out around 0 0 and then centred on the sheet.
+function layout(spec: ArtSpec, k: number, R: Dice): Plan {
+  const { seed, composition } = spec;
   const [a, b = a] = spec.objects as [ArtObject, ArtObject?];
   const label = spec.label?.trim() || undefined;
-  const left = r() < 0.5, lift = r() < 0.5 ? 330 : 590; // a side label: which side, and how high
-  const tilt = () => (r() - 0.5) * 7;
+  const side = label ? setNote(label, SIDE_W) : undefined, band = label ? setNote(label, bw(AREA)) : undefined;
+  const sideOk = !!side && side.size >= LABEL_MIN && side.lines.length <= 2;
+  // A note in the band above the composition, flush with its left or right ink edge.
+  const above = (anchor: "start" | "end", blk: Box) => noteAt(band!, anchor, anchor === "start" ? blk.x0 : blk.x1, blk.y0 - BAND_GAP - band!.h);
+  const inks = () => union(cuts.map(inkBox));
   const cuts: Cut[] = [];
-  let zone: Zone | undefined, target = 0;
-  const band = (anchor: "start" | "end"): Zone => ({ x0: X0, x1: X1, y: BAND_Y, anchor });
+  let target = 0, note: Note | undefined, flap: Flap | undefined;
 
-  if (composition === "hero" || composition === "twist") {
-    const base = composition === "hero" ? 560 : 520, side = !label || fits(label, 660 - base / 2);
-    const size = side ? base : base * BAND_K, x = CX + (label && side ? (left ? 170 : -170) : 0), y = side ? CY : CY + DROP;
-    cuts.push({ name: a, x, y, size, rot: tilt(), seed, flip: composition === "twist" && spec.twist === "flip" });
-    if (label) zone = !side ? band(left ? "start" : "end") : left ? { x0: X0, x1: x - size / 2 - 80, y: lift, anchor: "end" } : { x0: x + size / 2 + 80, x1: X1, y: lift, anchor: "start" };
+  if (composition === "hero" || composition === "twist" || composition === "peek") {
+    const twist = composition === "twist" ? (spec.twist ?? "cross") : undefined;
+    const o = pin(fit({ name: a, x: 0, y: 0, size: 600, rot: R.tilt[0]!, seed, flip: twist === "flip", grow: twist === "crack" ? 30 : 0 }, 780 * k, SUBJECT * k), 0, 0);
+    cuts.push(o);
+    const ib = inkBox(o), s = R.left ? -1 : 1;
+    if (composition === "peek") {
+      // The flap covers half the object on the note's side, so the arrow points at what is hidden.
+      const xa = s > 0 ? ib.x0 + bw(ib) * 0.5 : ib.x0 - 36 * k, xb = s > 0 ? ib.x1 + 36 * k : ib.x1 - bw(ib) * 0.5;
+      flap = { x: (xa + xb) / 2, y: (ib.y0 + ib.y1) / 2, w: xb - xa, h: bh(ib) + 80 * k, rot: s * R.flapTilt, side: s };
+    }
+    const blk = union([ib, ...(flap ? [flapBox(flap)] : [])]);
+    // A side note sits on the composition's middle line, so subject and note read as one balanced
+    // row (hung from the top edge it left the opposite lower quadrant empty, an L at phone size).
+    // A long one, or one that would squeeze a wide subject, goes in the band above.
+    const my = (blk.y0 + blk.y1) / 2 - (side?.h ?? 0) / 2;
+    if (label) note = !sideOk || bw(blk) + SIDE_GAP + side!.w > bw(AREA) ? above(s < 0 ? "start" : "end", blk) : s < 0 ? noteAt(side!, "end", blk.x0 - SIDE_GAP, my) : noteAt(side!, "start", blk.x1 + SIDE_GAP, my);
   } else if (composition === "versus") {
-    const size = 380, y = label ? CY + 40 : CY;
-    cuts.push({ name: a, x: CX - 290, y, size, rot: tilt(), seed, mirror: FACES_LEFT.has(a) });
-    cuts.push({ name: b, x: CX + 290, y, size, rot: tilt(), seed: seed + 1, red: true, offset: false, mirror: !FACES_LEFT.has(b) });
+    // Equal visual weight on one baseline, facing each other across a gap: both fit the same box,
+    // then the heavier one (by filled area, red weighed up) shrinks to the lighter one's weight.
+    const A = fit({ name: a, x: 0, y: 0, size: 400, rot: R.tilt[0]!, seed, mirror: FACES_LEFT.has(a) }, 500 * k, SUBJECT * k);
+    const B = fit({ name: b, x: 0, y: 0, size: 400, rot: R.tilt[1]!, seed: seed + 1, red: true, offset: false, mirror: !FACES_LEFT.has(b) }, 500 * k, SUBJECT * k);
+    // Twice, since a hand-drawn motif is only nearly linear in size.
+    for (let i = 0; i < 2; i++) { const W = Math.min(weight(A), weight(B)); for (const c of [A, B]) c.size *= Math.sqrt(W / weight(c)); }
+    cuts.push(pin(A, (-VS_GAP * k) / 2, 0, 1, 1), pin(B, (VS_GAP * k) / 2, 0, 0, 1));
     target = spec.labelPoints ?? 0;
-    // The note sits above the object it points at, on that object's outer side.
-    if (label) zone = !fits(label, CX - 40 - X0) ? { ...band(target ? "end" : "start"), y: 190 } : target ? { x0: CX + 40, x1: X1, y: 190, anchor: "end" } : { x0: X0, x1: CX - 40, y: 190, anchor: "start" };
+    if (label) note = above(target ? "end" : "start", inks());
   } else if (composition === "scale") {
-    const side = !label || fits(label, 640 - X0), huge = side ? 600 : 600 * BAND_K, y = side ? CY : CY + DROP;
-    cuts.push({ name: a, x: 480, y: y + huge / 2 - 65, size: 130, rot: tilt() * 2, seed, red: true, offset: false });
-    cuts.push({ name: b, x: 960, y, size: huge, rot: tilt() * 0.6, seed: seed + 1 });
+    // A tiny red object right beside a huge one, on one baseline. A note on the tiny one sits in
+    // the column over it, flush with its right edge, so the arrow drops straight onto it. Otherwise
+    // the note goes in the band, flush with the side of the object it points at.
     target = spec.labelPoints ?? 0;
-    if (label) zone = side ? { x0: X0, x1: 640, y: 420, anchor: "start" } : band(left ? "start" : "end");
+    const T = fit({ name: a, x: 0, y: 0, size: 140, rot: R.tilt[0]! * 2, seed, red: true, offset: false }, 150 * k, 0.24 * SUBJECT * k);
+    const H = fit({ name: b, x: 0, y: 0, size: 600, rot: R.tilt[1]! * 0.6, seed: seed + 1 }, 640 * k, SUBJECT * k);
+    const useSide = !target && sideOk && side!.w + SCALE_GAP * k + bw(inkBox(H)) <= bw(AREA), col = Math.max(bw(inkBox(T)), useSide ? side!.w : 0);
+    cuts.push(pin(T, col, 0, 1, 1), pin(H, col + SCALE_GAP * k, 0, 0, 1));
+    if (label) note = useSide ? noteAt(side!, "end", col, Math.min(inkBox(H).y0, inkBox(T).y0 - BAND_GAP - side!.h)) : above(target ? "end" : "start", inks());
   } else {
-    // odd: 5-7 copies in one or two rows, exactly one of them solid red and turned. A label
-    // goes in the band above, so the copies keep the full width and stay big.
-    const n = 5 + Math.floor(r() * 3), rows = n > 5 ? 2 : 1, per = rows === 1 ? [n] : [Math.ceil(n / 2), Math.floor(n / 2)];
-    const cell = (X1 - X0) / per[0]!, size = Math.min(rows === 1 ? 200 : 205, cell * 0.86), gap = size * 1.25, y0 = label ? CY + DROP : CY;
+    // odd: 5-7 copies in two centred rows on an even pitch, exactly one solid red and turned.
+    // With a label the red one is in the top row, nearest the note.
+    const proto = fit({ name: a, x: 0, y: 0, size: 300, rot: 0, seed }, ODD * 1.15 * k, ODD * k), pb = inkBox(proto);
+    const px = bw(pb) + ODD_GAP * k, py = bh(pb) + ODD_GAP * k, per = [Math.ceil(R.n / 2), Math.floor(R.n / 2)];
+    const pool = label ? per[0]! : R.n;
+    target = Math.floor(R.pick * pool);
     per.forEach((count, row) => {
       for (let col = 0; col < count; col++) {
-        const y = rows === 1 ? y0 : y0 + (row - 0.5) * gap, x = X0 + cell * (col + 0.5 + (per[0]! - count) / 2);
-        cuts.push({ name: a, x, y, size, rot: tilt(), seed: seed + cuts.length });
+        const i = cuts.length, odd = i === target;
+        cuts.push(pin({ name: a, x: 0, y: 0, size: proto.size, rot: odd ? R.turn : R.tilt[i]!, seed: seed + i, red: odd }, (col - (count - 1) / 2) * px, row * py));
       }
     });
-    // With a label, the odd one is in the top row, nearest the note, so the arrow crosses no other copy.
-    const pool = label ? cuts.flatMap((c, i) => (c.y === cuts[0]!.y ? [i] : [])) : cuts.map((_, i) => i);
-    target = pool[Math.floor(r() * pool.length)]!;
-    Object.assign(cuts[target]!, { red: true, rot: (r() < 0.5 ? -1 : 1) * (20 + r() * 14) });
-    const tx = cuts[target]!.x;
-    if (label) zone = band(tx < CX - 1 ? "start" : tx > CX + 1 ? "end" : left ? "start" : "end");
+    if (label) { const tx = cuts[target]!.x; note = above(tx < -1 ? "start" : tx > 1 ? "end" : R.left ? "start" : "end", inks()); }
   }
 
-  const note = label && zone ? noteLayout(label, zone) : undefined;
-  let stamp: Stamp | undefined;
-  if (spec.stamp) {
-    const word = spec.stamp.toUpperCase(), rot = -(5 + r() * 6), bw = width(word, STAMP_SIZE, W800) + word.length * 0.04 * STAMP_SIZE + 52, bh = STAMP_SIZE + 36;
-    const t = (rot * Math.PI) / 180, hw = (bw * Math.abs(Math.cos(t)) + bh * Math.abs(Math.sin(t))) / 2, hh = (bw * Math.abs(Math.sin(t)) + bh * Math.abs(Math.cos(t))) / 2;
-    const at = (x: number, y: number): Stamp => ({ word, x, y, rot, bw, bh, box: { x0: x - hw, y0: y - hh, x1: x + hw, y1: y + hh } });
-    // The first sheet corner that is clear of every object and the note; lower right first.
-    const spots = [at(SX + SW - 40 - bw / 2, 738), at(SX + 40 + bw / 2, 738), at(SX + SW - 40 - bw / 2, 196), at(SX + 40 + bw / 2, 196)];
-    for (let k = 0; !stamp; k++) {
-      stamp = spots.find((s) => !(note && hit(s.box, note.box)) && cuts.every((c) => !hit(s.box, cutBox(c))));
-      if (stamp || k === 12) { stamp ??= spots[0]; break; }
-      // No corner is clear: shrink the composition a little about its own middle and slide it
-      // left, away from the lower-right corner, as far as the sheet edge or a note on the left allows.
-      const mx = cuts.reduce((s, c) => s + c.x, 0) / cuts.length, my = cuts.reduce((s, c) => s + c.y, 0) / cuts.length;
-      const minX = Math.min(...cuts.map((c) => cutBox(c).x0)), wall = note && note.box.x1 < minX ? note.box.x1 + 60 : SX + 40;
-      const dx = -Math.min(30, Math.max(0, minX - wall));
-      for (const c of cuts) Object.assign(c, { x: mx + (c.x - mx) * 0.95 + dx, y: my + (c.y - my) * 0.95, size: c.size * 0.95 });
-    }
+  const p: Plan = { cuts, target, note, flap }, g = compositionBox(p);
+  shiftPlan(p, CX - (g.x0 + g.x1) / 2, CY - (g.y0 + g.y1) / 2);
+  return p;
+}
+
+const shiftPlan = (p: Plan, dx: number, dy: number) => {
+  for (const c of p.cuts) { c.x += dx; c.y += dy; }
+  if (p.flap) { p.flap.x += dx; p.flap.y += dy; }
+  if (p.note) p.note.box = { x0: p.note.box.x0 + dx, y0: p.note.box.y0 + dy, x1: p.note.box.x1 + dx, y1: p.note.box.y1 + dy };
+};
+
+// A rubber stamp. First choice is a corner of AREA clear of the composition, lower right first,
+// which leaves the composition where it is. Next is beside it, one GRID unit out on its middle
+// line, or under it, flush with its right edge; the two are then centred together.
+// That keeps a wide or tall subject big where a corner would force it to shrink.
+function stampFor(p: Plan, word: string, rot: number, fallback: boolean): Stamp | undefined {
+  const w = width(word, STAMP_SIZE, W800) + word.length * 0.04 * STAMP_SIZE + 52, h = STAMP_SIZE + 36;
+  const t = (rot * Math.PI) / 180, hw = (w * Math.abs(Math.cos(t)) + h * Math.abs(Math.sin(t))) / 2, hh = (w * Math.abs(Math.sin(t)) + h * Math.abs(Math.cos(t))) / 2;
+  const at = (x: number, y: number): Stamp => ({ word, x, y, rot, bw: w, bh: h, box: { x0: x - hw, y0: y - hh, x1: x + hw, y1: y + hh } });
+  const busy = [...taken(p), ...(p.note ? [p.note.box] : [])], g = compositionBox(p);
+  const corners = [at(AREA.x1 - hw, AREA.y1 - hh), at(AREA.x0 + hw, AREA.y1 - hh), at(AREA.x1 - hw, AREA.y0 + hh), at(AREA.x0 + hw, AREA.y0 + hh)];
+  const corner = corners.find((s) => busy.every((b) => !hit(s.box, b, 24)));
+  if (corner) return corner;
+  const gx = GRID + 2 * hw, gy = GRID + 2 * hh;
+  if (bw(g) + gx <= bw(AREA)) { shiftPlan(p, -gx / 2, 0); return at(g.x1 + GRID + hw - gx / 2, (g.y0 + g.y1) / 2); }
+  if (bh(g) + gy <= bh(AREA)) { shiftPlan(p, 0, -gy / 2); return at(g.x1 - hw, g.y1 + GRID + hh - gy / 2); }
+  return fallback ? corners[0] : undefined;
+}
+
+// Where everything goes. Exported so the tests can check boxes without parsing the SVG. The
+// composition starts at full size and shrinks about the centre until it fits AREA and leaves
+// room for the stamp.
+export function plan(spec: ArtSpec): Plan {
+  const r = rng(spec.seed * 131 + 17), tilt = () => (r() - 0.5) * 7;
+  const R: Dice = { left: r() < 0.5, tilt: Array.from({ length: 7 }, tilt), n: 5 + Math.floor(r() * 3), pick: r(), turn: (r() < 0.5 ? -1 : 1) * (14 + r() * 6), flapTilt: 2 + r() * 2, stampRot: -(5 + r() * 6) };
+  const word = spec.stamp?.toUpperCase();
+  let p!: Plan;
+  // ponytail: a 22-letter label plus a long stamp can need k near 0.4; the floor keeps a stamp from ever landing on the art.
+  for (let k = 1; k > 0.3; k -= 0.04) {
+    p = layout(spec, k, R);
+    const g = compositionBox(p);
+    if (bw(g) > bw(AREA) || bh(g) > bh(AREA)) continue;
+    if (!word || (p.stamp = stampFor(p, word, R.stampRot, false))) return p;
   }
-  return { cuts, target: Math.min(target, cuts.length - 1), note, stamp };
+  if (word) p.stamp = stampFor(p, word, R.stampRot, true);
+  return p;
 }
 
 // ---- scrapbook parts ----
@@ -552,18 +661,34 @@ function arrow(a: Pt, b: Pt, seed: number): string {
   return pencil("M" + pts.map(xy).join("L") + wing(0.45) + wing(-0.45), 5.5, PENCIL);
 }
 
-// The pencil note and its arrow. The arrow leaves the side of the note that faces the object
-// and stops just short of the silhouette's nearest edge, so its head sits on clear paper.
-function drawNote(n: Note, target: Cut, seed: number): string {
-  const { box: b, z } = n, rot = -2.5 + (seed % 3);
-  const start: Pt = target.x > b.x1 + 40 ? [b.x1 + 22, z.y] : target.x < b.x0 - 40 ? [b.x0 - 22, z.y] : [Math.min(b.x1 - 20, Math.max(b.x0 + 20, target.x)), target.y > z.y ? b.y1 + 28 : b.y0 - 28];
+// The pencil note and its arrow. The arrow leaves the side of the note that faces its aim and
+// stops just short of the aim's nearest edge, so its head sits on clear paper.
+function drawNote(n: Note, aim: Pt[], pad: number, seed: number): string {
+  const b = n.box, my = (b.y0 + b.y1) / 2, rot = -2.5 + (seed % 3), tx = n.anchor === "start" ? b.x0 : b.x1;
+  const t = boxOf(aim), cx = (t.x0 + t.x1) / 2, cy = (t.y0 + t.y1) / 2;
+  const start: Pt = cx > b.x1 + 40 ? [b.x1 + 22, my] : cx < b.x0 - 40 ? [b.x0 - 22, my] : [Math.min(b.x1 - 20, Math.max(b.x0 + 20, cx)), cy > my ? b.y1 + 16 : b.y0 - 16];
   const dist = (p: Pt) => Math.hypot(p[0] - start[0], p[1] - start[1]);
-  const near = rim(target).reduce((p, q) => (dist(q) < dist(p) ? q : p));
-  const d = dist(near) || 1, gap = Math.min(d / 2, 10 + edgeOf(target.size) / 2 + offOf(target.size) / 2);
+  const near = aim.reduce((p, q) => (dist(q) < dist(p) ? q : p));
+  const d = dist(near) || 1, gap = Math.min(d / 2, pad);
   const end: Pt = [near[0] + ((start[0] - near[0]) / d) * gap, near[1] + ((start[1] - near[1]) / d) * gap];
   return (
-    n.lines.map((l, i) => `<text x="${f1(n.tx)}" y="${f1(n.top + n.size * 0.74 + i * n.lh)}" text-anchor="${z.anchor}" font-size="${n.size}" font-weight="600" fill="${PENCIL}" transform="rotate(${rot} ${f1(n.tx)} ${f1(z.y)})">${esc(l)}</text>`).join("") +
+    n.lines.map((l, i) => `<text x="${f1(tx)}" y="${f1(b.y0 + n.size * 0.76 + i * n.lh)}" text-anchor="${n.anchor}" font-size="${n.size}" font-weight="600" fill="${PENCIL}" transform="rotate(${rot} ${f1(tx)} ${f1(my)})">${esc(l)}</text>`).join("") +
     arrow(start, end, seed)
+  );
+}
+
+// peek's flap: a torn scrap of the same sheet, lifted by a soft shadow and taped at the top.
+// Its torn edge faces the half of the object that still shows.
+function drawFlap(f: Flap, seed: number, r: () => number): string {
+  const piece = cut(f.w, f.h, seed + 5, { torn: f.side > 0 ? { l: true } : { r: true }, j: 1.5, step: 60, tj: 5, ts: 7 });
+  return (
+    `<g transform="translate(${f1(f.x - f.w / 2)} ${f1(f.y - f.h / 2)}) rotate(${f1(f.rot)} ${f1(f.w / 2)} ${f1(f.h / 2)})">` +
+    `<path d="${piece}" fill="${INK}" opacity=".24" transform="translate(${f1(-f.side * 4)} 12)" filter="url(#soft)"/>` +
+    `<path d="${piece}" fill="${INK}" opacity=".18" transform="translate(0 2)" filter="url(#soft-near)"/>` +
+    `<path d="${piece}" fill="${SHEET}"/>` +
+    fibres(10, 10, f.w - 20, f.h - 20, Math.round((f.w * f.h) / 9000), r) +
+    tape(f.w / 2, 4, Math.min(190, f.w * 0.7), 48, f.side * (5 + r() * 4)) +
+    `</g>`
   );
 }
 
@@ -581,8 +706,11 @@ function drawStamp(s: Stamp, r: () => number): string {
   );
 }
 
+// The alien sticker, the brand mark: on the paper left of the sheet, clear of the crop zone.
+export const STICKER: Box = { x0: 40, y0: 736, x1: 106, y1: 802 };
+
 export function renderArt(spec: ArtSpec): string {
-  const { seed, composition } = spec, { cuts, target, note, stamp } = plan(spec), r = rng(seed * 977 + 29);
+  const { seed, composition } = spec, { cuts, target, note, stamp, flap } = plan(spec), r = rng(seed * 977 + 29);
 
   const out: string[] = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" font-family="Outfit, 'Helvetica Neue', Arial, sans-serif">`,
@@ -604,32 +732,35 @@ export function renderArt(spec: ArtSpec): string {
     `</g>`,
   );
 
-  const c = cuts[0]!;
+  const c = cuts[0]!, ib = inkBox(c), mx = (ib.x0 + ib.x1) / 2, my = (ib.y0 + ib.y1) / 2;
   if (composition === "twist" && spec.twist === "crack") {
     // The object split down a jagged line, the halves pulled apart so the sheet shows between.
-    const h = c.size * 0.62, pts: Pt[] = [];
-    for (let i = 0; i <= 7; i++) pts.push([c.x + (i % 2 ? 1 : -1) * c.size * 0.05 + (r() - 0.5) * c.size * 0.08, c.y - h + (2 * h * i) / 7]);
-    const half = (sx: number) => poly([[c.x + sx * h * 2, c.y - h], ...pts, [c.x + sx * h * 2, c.y + h]]);
+    const w = bw(ib), h = bh(ib) / 2 + 40, pts: Pt[] = [];
+    for (let i = 0; i <= 7; i++) pts.push([mx + (i % 2 ? 1 : -1) * w * 0.04 + (r() - 0.5) * w * 0.07, my - h + (2 * h * i) / 7]);
+    const half = (sx: number) => poly([[mx + sx * (w + 200), my - h], ...pts, [mx + sx * (w + 200), my + h]]);
     out.push(
       `<clipPath id="crack-l"><path d="${half(-1)}"/></clipPath><clipPath id="crack-r"><path d="${half(1)}"/></clipPath>`,
-      `<g transform="translate(-18 -5) rotate(-2.5 ${c.x} ${c.y})"><g clip-path="url(#crack-l)">${cutout(c, "ht-l")}</g></g>`,
-      `<g transform="translate(18 6) rotate(2.5 ${c.x} ${c.y})"><g clip-path="url(#crack-r)">${cutout(c, "ht-r")}</g></g>`,
+      `<g transform="translate(-18 -5) rotate(-2.5 ${f1(mx)} ${f1(my)})"><g clip-path="url(#crack-l)">${cutout(c, "ht-l")}</g></g>`,
+      `<g transform="translate(18 6) rotate(2.5 ${f1(mx)} ${f1(my)})"><g clip-path="url(#crack-r)">${cutout(c, "ht-r")}</g></g>`,
     );
   } else {
     cuts.forEach((c, i) => out.push(cutout(c, `ht-${i}`)));
   }
   if (composition === "twist" && (spec.twist ?? "cross") === "cross") {
-    const k = c.size * 0.42;
-    out.push(pencil(line(c.x - k, c.y - k, c.x + k, c.y + k * 0.9, seed, 3) + line(c.x + k * 0.95, c.y - k, c.x - k * 0.9, c.y + k, seed + 1, 3), 18));
+    const kx = bw(ib) * 0.5, ky = bh(ib) * 0.5;
+    out.push(pencil(line(mx - kx, my - ky, mx + kx, my + ky * 0.9, seed, 3) + line(mx + kx * 0.95, my - ky, mx - kx * 0.9, my + ky, seed + 1, 3), 18));
   }
+  if (flap) out.push(drawFlap(flap, seed, r));
 
-  if (note) out.push(drawNote(note, cuts[target]!, seed));
+  if (note) {
+    const t = cuts[target]!;
+    out.push(flap ? drawNote(note, flapRim(flap), 16, seed) : drawNote(note, rim(t), 10 + edgeOf(t.size) / 2 + offOf(t.size) / 2, seed));
+  }
   if (stamp) out.push(drawStamp(stamp, r));
 
-  // The alien sticker at bottom left: the brand mark.
-  const m = 66;
+  const m = STICKER.x1 - STICKER.x0;
   out.push(
-    `<g transform="translate(26 812) rotate(-10 ${m / 2} ${m / 2})">`,
+    `<g transform="translate(${STICKER.x0} ${STICKER.y0}) rotate(-10 ${m / 2} ${m / 2})">`,
     `<path d="${alien(m, m)}" fill="${WHITE}" stroke="${WHITE}" stroke-width="10" stroke-linejoin="round"/>`,
     `<path d="${alien(m, m)}" fill="${RED}"/>`,
     `</g>`,
