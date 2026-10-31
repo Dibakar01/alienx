@@ -6,7 +6,9 @@ import { LIMIT, problems, weighted } from "../lib/post.ts";
 import { type AccountInfo, Accounts, type Upkeep } from "./accounts.tsx";
 import { changePostAction, decideAction, scheduleAction } from "./actions.ts";
 import { when } from "../lib/time.ts";
+import { startJob } from "./activity.tsx";
 import { Ideas } from "./ideas.tsx";
+import { Working } from "./working.tsx";
 import { Mascot } from "./mascot.tsx";
 import { ViewTitle } from "./title.tsx";
 import { XPreview } from "./x-preview.tsx";
@@ -33,7 +35,24 @@ const STORE = "alienx.accounts";
 // Create: where a post gets made. Start from a discovered idea or your own, get five drafts
 // in your voice, approve one. Approving prepares its picture, sources and slot and puts it
 // on the Studio calendar.
-export function Studio({ accounts, topics = [], onOpenStudio }: { accounts: AccountInfo[]; topics?: Topic[]; onOpenStudio?: () => void }) {
+export type Face = "thought" | "post";
+
+export function Studio({
+  accounts,
+  topics = [],
+  face,
+  setFace,
+  onOpenStudio,
+  onAbout,
+}: {
+  accounts: AccountInfo[];
+  topics?: Topic[];
+  // Which half is in front: the idea (step 1) or the drafts (step 2). The step rail sets it too.
+  face: Face;
+  setFace: (f: Face) => void;
+  onOpenStudio?: () => void;
+  onAbout?: () => void;
+}) {
   const ready = accounts.filter((a) => a.ready);
   const [chosen, setChosen] = useState<string[]>(ready.slice(0, 1).map((a) => a.handle));
   const [seed, setSeed] = useState("");
@@ -50,14 +69,14 @@ export function Studio({ accounts, topics = [], onOpenStudio }: { accounts: Acco
   const [sets, setSets] = useState<Record<string, DraftSet>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
+  // When each account's drafting started, for the loading state's clock.
+  const [busyAt, setBusyAt] = useState<Record<string, number>>({});
   // What has been decided on this page, so the picked draft and the tabs can show it.
   const [decided, setDecided] = useState<Record<number, Status>>({});
   // Which account's drafts and which angle the post face shows. The angle is shared, so
   // switching account compares the same angle across voices.
   const [shown, setShown] = useState("");
   const [angle, setAngle] = useState("story");
-  // On a phone only one face shows at a time.
-  const [face, setFace] = useState<"thought" | "post">("thought");
   // Set when Generate is pressed before the page is ready for it: the hint speaks up.
   const [nudge, setNudge] = useState(false);
   const [upkeep, setUpkeep] = useState<Upkeep>({ mode: "posts", who: accounts[0]?.handle ?? "" });
@@ -87,12 +106,9 @@ export function Studio({ accounts, topics = [], onOpenStudio }: { accounts: Acco
   const viewSet = view && !busy[view] && !errors[view] ? sets[view] : undefined;
   const statusOf = (d: Draft) => decided[d.id] ?? d.status;
   const picked = (h: string) => Boolean(sets[h]?.drafts.some((d) => statusOf(d) === "approved"));
-  // The step to do now: choose who is posting, then say the thought, then pick a draft.
-  const current = !picking.length ? 1 : working || repeat ? 3 : 2;
-  // Inside one profile the account is already chosen: the "who" step disappears and the
-  // steps are numbered from the thought.
+  // The step in front, numbered as on the step rail: 1 the idea, 2 choose and approve.
+  const current = face === "post" ? 2 : 1;
   const solo = accounts.length === 1;
-  const step = (n: number) => (solo ? n - 1 : n);
   const hint = working
     ? "About half a minute."
     : solo && !ready.length
@@ -139,6 +155,7 @@ export function Studio({ accounts, topics = [], onOpenStudio }: { accounts: Acco
     setShown(handles[0]!);
     setFace("post");
     setBusy((b) => ({ ...b, ...Object.fromEntries(handles.map((h) => [h, true])) }));
+    setBusyAt((b) => ({ ...b, ...Object.fromEntries(handles.map((h) => [h, Date.now()])) }));
     setErrors((e) => ({ ...e, ...Object.fromEntries(handles.map((h) => [h, ""])) }));
     for (const h of handles) {
       const account = accounts.find((a) => a.handle === h)!;
@@ -153,10 +170,12 @@ export function Studio({ accounts, topics = [], onOpenStudio }: { accounts: Acco
         hashtags,
         research: fromIdea?.findings ?? [],
       };
+      const done = startJob({ handle: h, label: `Drafting five posts for @${h}`, kind: "draft", where: "drafts", typical: 50 });
       fetch("/api/generate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
         .then((r) => r.json() as Promise<{ drafts: Draft[] } | { error: string }>)
         .catch((e: unknown) => ({ error: String(e) }))
         .then((result) => {
+          done("error" in result ? { ok: false, text: `Drafting for @${h} stopped. Try again.` } : { ok: true, text: `Five drafts ready for @${h}. Pick one to approve.` });
           if ("error" in result) setErrors((e) => ({ ...e, [h]: result.error }));
           else setSets((s) => ({ ...s, [h]: { drafts: result.drafts, allow, asked, topicId: fromIdea?.id } }));
           setBusy((b) => ({ ...b, [h]: false }));
@@ -178,42 +197,33 @@ export function Studio({ accounts, topics = [], onOpenStudio }: { accounts: Acco
   const label = working ? "Working on it." : repeat ? "Generate again" : picking.length ? `Generate ${picking.length * 5} drafts` : "Generate drafts";
 
   return (
-    <div className="grid h-full grid-rows-[auto_1fr_auto] p-2 pb-24 sm:p-3 sm:pb-24 lg:gap-y-4 lg:px-8 lg:pt-5">
+    <div className="grid h-full grid-rows-[auto_1fr] p-2 pb-24 sm:p-3 sm:pb-24 lg:gap-y-4 lg:px-8 lg:pt-5">
       <header className="row-start-1 flex items-center gap-4 pr-14 max-lg:pb-2">
-        <Mascot blink={working} className="size-8 text-brand" />
+        <button type="button" onClick={onAbout} aria-label="About alienX" className="rounded-full">
+          <Mascot blink={working} className="size-8 text-brand" />
+        </button>
         <div>
           <ViewTitle name="Create" who={accounts.length === 1 ? accounts[0]!.name : accounts.length === 3 ? "all three" : "all accounts"} />
           <p className="text-sm text-snow-muted max-sm:hidden">Start from an idea, pick the best of five drafts, approve it. It goes to the Studio ready to post.</p>
         </div>
       </header>
 
-      <main className="sheet tape row-start-2 grid min-h-0 w-full max-w-6xl grid-rows-[auto_1fr] justify-self-center lg:h-full lg:max-h-[46rem] lg:grid-cols-2 lg:grid-rows-1 lg:self-center">
-        {/* Phone only: the mark and the switch between the two faces. */}
-        <div className="flex items-center gap-3 border-b border-line px-3 py-2 lg:hidden">
-          <div role="group" aria-label="Face" className="mx-auto flex gap-1">
-            {(["thought", "post"] as const).map((f) => (
-              <button
-                key={f}
-                type="button"
-                aria-pressed={face === f}
-                onClick={() => setFace(f)}
-                className={`pill cursor-pointer rounded-card px-3.5 py-1.5 text-sm font-medium ${face === f ? "bg-ink text-paper" : "text-ink hover:bg-wash"}`}
-              >
-                {f === "thought" ? "Idea" : "Drafts"}
-              </button>
-            ))}
-          </div>
-        </div>
+      <main className="sheet tape row-start-2 grid min-h-0 w-full max-w-6xl justify-self-center lg:h-full lg:max-h-[46rem] lg:grid-cols-2 lg:grid-rows-1 lg:self-center">
 
-        <section aria-label="The thought" className={`flex min-h-0 flex-col gap-3 p-4 lg:p-6 ${face === "post" ? "max-lg:hidden" : ""}`}>
+        <section
+          aria-label="The idea"
+          onPointerDown={() => setFace("thought")}
+          onFocus={() => setFace("thought")}
+          className={`flex min-h-0 flex-col gap-3 p-4 transition-opacity duration-300 lg:p-6 ${face === "post" ? "max-lg:hidden lg:opacity-55 lg:hover:opacity-100" : ""}`}
+        >
           {!solo && (
-          <Head n={1} shown={step(1)} current={current} title="Who is posting">
+          <Head n={0} current={current} title="Who is posting">
             <button type="button" className="link" onClick={() => openUpkeep("posts", picking[0] ?? upkeep.who)}>
               Accounts
             </button>
           </Head>
           )}
-          <div role="group" aria-labelledby="step-1" className={`flex flex-wrap gap-2 ${solo ? "hidden" : ""}`}>
+          <div role="group" aria-labelledby="step-0" className={`flex flex-wrap gap-2 ${solo ? "hidden" : ""}`}>
             {accounts.map((a) => {
               const on = picking.includes(a.handle);
               // A chosen account carries its own pillar picker, joined to its switch.
@@ -249,7 +259,7 @@ export function Studio({ accounts, topics = [], onOpenStudio }: { accounts: Acco
           </div>
 
           <div className={`flex min-h-0 flex-1 flex-col gap-3 ${solo ? "" : "mt-4"}`}>
-            <Head n={2} shown={step(2)} current={current} title="Start from an idea">
+            <Head n={1} current={current} title="Start from an idea">
               <span className="segmented" style={{ "--at": startFrom === "ideas" ? 0 : 1 } as React.CSSProperties} role="group" aria-label="Start from">
                 <span aria-hidden="true" />
                 <button type="button" aria-pressed={startFrom === "ideas"} onClick={() => setStartFrom("ideas")}>
@@ -284,7 +294,7 @@ export function Studio({ accounts, topics = [], onOpenStudio }: { accounts: Acco
             <textarea
               ref={thought}
               id="thought"
-              aria-labelledby="step-2"
+              aria-labelledby="step-1"
               rows={3}
               value={seed}
               onChange={(e) => {
@@ -349,8 +359,13 @@ export function Studio({ accounts, topics = [], onOpenStudio }: { accounts: Acco
           </div>
         </section>
 
-        <section aria-label="The post" className={`flex min-h-0 flex-col gap-3 p-4 lg:border-l lg:border-line lg:p-6 ${face === "thought" ? "max-lg:hidden" : ""}`}>
-          <Head n={3} shown={step(3)} current={current} title="Choose and approve">
+        <section
+          aria-label="The drafts"
+          onPointerDown={() => setFace("post")}
+          onFocus={() => setFace("post")}
+          className={`flex min-h-0 flex-col gap-3 p-4 transition-opacity duration-300 lg:border-l lg:border-line lg:p-6 ${face === "thought" ? "max-lg:hidden lg:opacity-55 lg:hover:opacity-100" : ""}`}
+        >
+          <Head n={2} current={current} title="Choose and approve">
             {/* On a phone the chosen author tab right below already names the account. */}
             {viewSet && <p className="min-w-0 truncate text-sm text-muted max-sm:hidden">Approve one, or reject with a reason to teach @{view}.</p>}
           </Head>
@@ -397,9 +412,20 @@ export function Studio({ accounts, topics = [], onOpenStudio }: { accounts: Acco
 
           <div className="flex min-h-0 flex-1 flex-col">
             {!view ? (
-              <Notice text="No drafts yet. Give me a thought to study." />
+              <Notice text="No drafts yet." note="Pick an idea in step 1, or write your own. Five drafts in your voice land here.">
+                <button type="button" className="btn" onClick={() => setFace("thought")}>
+                  Back to 1 Idea
+                </button>
+              </Notice>
             ) : busy[view] ? (
-              <Notice blink text="Studying the human." note="Five angles are coming: story, contrarian, observation, lesson, question." />
+              <div className="grid flex-1 place-items-center">
+                <Working
+                  kind="draft"
+                  title="Studying the human."
+                  note={`Writing five angles for @${view} (story, contrarian, observation, lesson, question), each checked against X's rules. About half a minute; you can keep looking around.`}
+                  since={busyAt[view]}
+                />
+              </div>
             ) : errors[view] ? (
               <Notice text="Signal lost. Try again." note={errors[view]} alert>
                 <button type="button" className="btn" onClick={() => run([view])}>
@@ -427,11 +453,6 @@ export function Studio({ accounts, topics = [], onOpenStudio }: { accounts: Acco
         </section>
       </main>
 
-      <footer className="row-start-3 flex items-baseline justify-between gap-4 text-xs text-snow-muted max-lg:hidden">
-        <p>Drafts in your voice. You post.</p>
-        <p className="font-semibold text-snow">alienX</p>
-      </footer>
-
       <Accounts
         ref={dialog}
         accounts={accounts}
@@ -448,14 +469,16 @@ export function Studio({ accounts, topics = [], onOpenStudio }: { accounts: Acco
 
 // A step's heading, signed like a wayfinding panel: the step to do now is red,
 // finished steps are black, and the ones still ahead are grey.
-function Head({ n, shown = n, current, title, children }: { n: number; shown?: number; current: number; title: string; children?: React.ReactNode }) {
+function Head({ n, current, title, children }: { n: number; current: number; title: string; children?: React.ReactNode }) {
   const tone = n === current ? "text-brand" : n < current ? "text-ink" : "text-strong";
   return (
     <div className="flex items-baseline justify-between gap-x-4">
       <h2 id={`step-${n}`} aria-current={n === current ? "step" : undefined} className="flex shrink-0 items-baseline gap-2.5 text-lg leading-tight font-medium">
-        <span aria-hidden="true" className={`font-mono transition-colors duration-150 motion-reduce:transition-none ${tone}`}>
-          {shown}
-        </span>
+        {n > 0 && (
+          <span aria-hidden="true" className={`font-mono transition-colors duration-150 motion-reduce:transition-none ${tone}`}>
+            {n}
+          </span>
+        )}
         {title}
       </h2>
       {children}
@@ -543,7 +566,11 @@ function Card({
       navigator.vibrate?.(12); // a small knock on phones, as the stamp lands
       setStatus("approved");
       onDecided("approved");
-      void fetch("/api/art", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: result.post.id }) });
+      const drawn = startJob({ handle: draft.handle, label: `Drawing the picture for @${draft.handle}`, kind: "picture", where: "week", typical: 35 });
+      void fetch("/api/art", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: result.post.id }) })
+        .then((r) => r.json() as Promise<{ error?: string }>)
+        .then((r) => drawn(r.error ? { ok: false, text: `The picture for @${draft.handle} did not draw. Redraw it in the Studio.` } : { ok: true, text: `Picture ready. The post is on the Studio calendar.` }))
+        .catch(() => drawn({ ok: false, text: "The picture did not draw. Redraw it in the Studio." }));
     });
 
   return (
@@ -649,8 +676,8 @@ function Card({
                 the stamp says it; the sentence stays for screen readers. */}
             <span className="order-last basis-full text-sm text-muted max-sm:sr-only">{status === "approved" ? (scheduled ? (topicId ? `Approved. Its picture, sources and first reply are being made, and it is on the Studio calendar for ${when(scheduled.at)} IST.` : `Approved. Its picture is being drawn, and it is on the Studio calendar for ${when(scheduled.at)} IST.`) : "Saved. The next drafts learn from this.") : "Saved with your reason. The next drafts avoid this."}</span>
             {scheduled && onOpenStudio && (
-              <button type="button" className="link" onClick={onOpenStudio}>
-                Open in Studio
+              <button type="button" className="btn btn-primary" onClick={onOpenStudio}>
+                Next: 3 Studio
               </button>
             )}
             <button type="button" className="link" disabled={busy} onClick={() => decide("draft")}>

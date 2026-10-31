@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 process.env.ALIENX_DB = ":memory:";
-const { claimDue, createPost, listPosts, takenSlots, updatePost } = await import("../lib/db.ts");
+const { claimDue, createPost, decide, listPosts, saveDrafts, takenSlots, updatePost } = await import("../lib/db.ts");
 
 const post = (handle: string, scheduled_at: string) =>
   createPost({ handle, posts: ["hello"], claims: [], source: "seed", scheduled_at });
@@ -28,4 +28,16 @@ test("killed posts free their slot and leave the week", () => {
 test("only known fields of a post can be patched", () => {
   const p = post("iamqalakaar", "2026-11-05T08:00:00.000Z");
   assert.throws(() => updatePost(p.id, { handle: "x" } as never), /cannot be changed/);
+});
+
+test("a post alienX booked itself is its pick until someone approves the draft", () => {
+  const [d] = saveDrafts({ handle: "iamqalakaar", seed: "idea", format: "single" }, [{ angle: "story", posts: ["hi"], claims: [] }]);
+  const at = "2026-11-06T08:00:00.000Z";
+  const p = createPost({ handle: "iamqalakaar", draft_id: d!.id, posts: ["hi"], claims: [], source: "plan", scheduled_at: at });
+  const mine = post("iamqalakaar", "2026-11-06T12:00:00.000Z");
+  const week = () => listPosts("2026-11-06T00:00:00.000Z", "2026-11-07T00:00:00.000Z");
+  assert.equal(week().find((x) => x.id === p.id)?.picked, 1);
+  assert.equal(week().find((x) => x.id === mine.id)?.picked, 0);
+  decide(d!.id, "approved", ["hi"]);
+  assert.equal(week().find((x) => x.id === p.id)?.picked, 0);
 });

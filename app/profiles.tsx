@@ -1,32 +1,60 @@
 "use client";
 
-// The first screen after the Cloudflare login: who is posting. One torn sheet per account,
-// with what needs it; "All three" opens the combined week. Profiles are a view, not a
-// permission: the one login covers everyone. With no accounts yet (a fresh clone), it
-// offers to add the first one.
-import { useRef, useState } from "react";
+// Who is posting: a rotary dial. "Add an account" comes first on the rim, then each account,
+// then all of them. Turn it (drag, arrow keys, the scroll wheel, or tap a name); it clicks
+// into each detent on One Flow's spring, and the centre shows who is chosen with Enter.
+// Profiles are a view, not a permission: the one login covers everyone. With no accounts
+// yet (a fresh clone), it welcomes you and adds the first one.
+import { useEffect, useRef, useState } from "react";
 import type { Post } from "../lib/db.ts";
 import { type AccountInfo, Accounts, type Upkeep } from "./accounts.tsx";
+import { Avatar } from "./avatar.tsx";
 import { Mascot } from "./mascot.tsx";
 
-export function Profiles({
-  accounts,
-  posts,
-  onPick,
-}: {
-  accounts: AccountInfo[];
-  posts: Post[];
-  onPick: (handle: string) => void;
-}) {
+type Slot = { kind: "add" } | { kind: "account"; account: AccountInfo } | { kind: "all" };
+
+const reduced = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const mod = (a: number, n: number) => ((a % n) + n) % n;
+
+export function Profiles({ accounts, posts, onPick, onAbout }: { accounts: AccountInfo[]; posts: Post[]; onPick: (handle: string) => void; onAbout?: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [upkeep, setUpkeep] = useState<Upkeep>({ mode: "add", who: accounts[0]?.handle ?? "" });
   const add = () => {
     setUpkeep((u) => ({ ...u, mode: "add" }));
     dialog.current?.showModal();
   };
-  const accountsDialog = (
-    <Accounts ref={dialog} accounts={accounts} upkeep={upkeep} onChange={setUpkeep} onAdded={() => dialog.current?.close()} />
-  );
+  const accountsDialog = <Accounts ref={dialog} accounts={accounts} upkeep={upkeep} onChange={setUpkeep} onAdded={() => dialog.current?.close()} />;
+
+  const slots: Slot[] = [{ kind: "add" }, ...accounts.map((account) => ({ kind: "account" as const, account })), ...(accounts.length > 1 ? [{ kind: "all" as const }] : [])];
+  const n = slots.length;
+  const step = 360 / n;
+  // The dial's turn in degrees; the slot at the pointer is the chosen one. Starts on the first account.
+  const [rot, setRot] = useState(-step);
+  const [dragging, setDragging] = useState(false);
+  const drag = useRef<{ a0: number; r0: number; last: number } | null>(null);
+  const face = useRef<HTMLDivElement>(null);
+  const chosen = mod(Math.round(-rot / step), n);
+  const slot = slots[chosen]!;
+
+  // A small knock on phones each time a detent passes under the pointer.
+  const lastTick = useRef(chosen);
+  useEffect(() => {
+    if (lastTick.current !== chosen) navigator.vibrate?.(4);
+    lastTick.current = chosen;
+  }, [chosen]);
+
+  const turnTo = (i: number) => {
+    // The shortest way round to slot i.
+    const target = -i * step;
+    const diff = mod(target - rot + 180, 360) - 180;
+    setRot(rot + diff);
+  };
+  const enter = (s: Slot = slot) => (s.kind === "add" ? add() : onPick(s.kind === "all" ? "all" : s.account.handle));
+
+  const angleAt = (x: number, y: number) => {
+    const r = face.current!.getBoundingClientRect();
+    return (Math.atan2(y - (r.top + r.height / 2), x - (r.left + r.width / 2)) * 180) / Math.PI;
+  };
 
   if (accounts.length === 0)
     return (
@@ -45,54 +73,128 @@ export function Profiles({
       </div>
     );
 
+  const stats = (handle?: string) => {
+    const mine = posts.filter((p) => !handle || p.handle === handle);
+    const due = mine.filter((p) => p.status === "due").length;
+    const coming = mine.filter((p) => p.status === "scheduled").length;
+    return due ? `${due} ${due === 1 ? "post" : "posts"} due` : `${coming} on the calendar`;
+  };
+  const ease = dragging || reduced() ? "none" : "transform var(--dur-spring) var(--spring)";
+
   return (
-    <div className="grid h-full grid-rows-[auto_1fr_auto] gap-6 p-4 sm:p-8">
+    <div className="grid h-full grid-rows-[auto_1fr_auto] gap-2 p-4 sm:p-8">
       <header className="flex items-center gap-4 pr-14">
-        <Mascot className="size-9 text-brand" />
+        <button type="button" onClick={onAbout} aria-label="About alienX" className="rounded-full">
+          <Mascot className="size-9 text-brand" />
+        </button>
         <div>
           <h2 className="text-2xl leading-tight font-bold tracking-[-0.03em]">Who is posting?</h2>
-          <p className="text-sm text-snow-muted">Pick a profile. You can switch any time from the dock.</p>
+          <p className="text-sm text-snow-muted">Turn the dial (drag it, use the arrow keys or tap a name), then enter.</p>
         </div>
-
       </header>
 
-      <main className="rise grid content-center gap-6 sm:grid-cols-3 lg:mx-auto lg:w-full lg:max-w-5xl">
-        {accounts.map((a, i) => {
-          const mine = posts.filter((p) => p.handle === a.handle);
-          const due = mine.filter((p) => p.status === "due").length;
-          const coming = mine.filter((p) => p.status === "scheduled").length;
-          return (
-            <button
-              key={a.handle}
-              type="button"
-              data-press
-              onClick={() => onPick(a.handle)}
-              style={{ "--r": `${(i - 1) * 1.2}deg`, "--i": i } as React.CSSProperties}
-              className={`sheet ${["", "sheet-b", "sheet-c"][i % 3]} tape grid cursor-pointer justify-items-center gap-3 px-6 pt-10 pb-7 text-center hover:[rotate:0deg] hover:-translate-y-1 max-sm:grid-cols-[auto_1fr] max-sm:justify-items-start max-sm:gap-x-4 max-sm:pt-7 max-sm:text-left`}
-            >
-              <span className={`grid size-20 place-items-center rounded-full text-3xl font-bold max-sm:row-span-3 max-sm:size-14 max-sm:text-2xl ${a.type === "brand" ? "bg-brand text-paper" : "bg-ink text-paper"}`}>
-                {a.type === "brand" ? <Mascot className="size-11 max-sm:size-8" /> : a.name.slice(0, 1)}
-              </span>
-              <span className="text-xl font-bold tracking-[-0.02em]">{a.name}</span>
-              <span className="text-sm text-muted">@{a.handle}</span>
-              <span className="text-sm">
-                {due > 0 ? <span className="font-semibold text-brand">{due === 1 ? "1 post due" : `${due} posts due`}</span> : <span className="text-muted">{coming === 1 ? "1 on the schedule" : `${coming} on the schedule`}</span>}
-              </span>
-            </button>
-          );
-        })}
+      <main className="grid place-items-center">
+        <div
+          ref={face}
+          role="listbox"
+          tabIndex={0}
+          aria-label="Who is posting. Turn with the arrow keys, Enter to choose."
+          aria-activedescendant={`slot-${chosen}`}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowRight" || e.key === "ArrowDown") (e.preventDefault(), setRot(rot - step));
+            if (e.key === "ArrowLeft" || e.key === "ArrowUp") (e.preventDefault(), setRot(rot + step));
+            if (e.key === "Enter" || e.key === " ") (e.preventDefault(), enter());
+          }}
+          onWheel={(e) => setRot(rot + (e.deltaY > 0 ? -step : step))}
+          onPointerDown={(e) => {
+            if ((e.target as HTMLElement).closest("button")) return;
+            e.currentTarget.setPointerCapture(e.pointerId);
+            drag.current = { a0: angleAt(e.clientX, e.clientY), r0: rot, last: rot };
+            setDragging(true);
+          }}
+          onPointerMove={(e) => {
+            const d = drag.current;
+            if (!d) return;
+            let delta = angleAt(e.clientX, e.clientY) - d.a0;
+            delta = mod(delta + 180, 360) - 180;
+            d.last = d.r0 + delta;
+            setRot(d.last);
+          }}
+          onPointerUp={() => {
+            const d = drag.current;
+            drag.current = null;
+            setDragging(false);
+            if (d) setRot(Math.round(d.last / step) * step);
+          }}
+          style={{ "--dial": "min(36rem, 94vw, 62vh)" } as React.CSSProperties}
+          className="relative aspect-square w-(--dial) cursor-grab touch-none rounded-full outline-none select-none focus-visible:ring-4 focus-visible:ring-brand/60 active:cursor-grabbing"
+        >
+          {/* The finger stop, fixed at twelve o'clock: whoever turns under it is posting. */}
+          <svg viewBox="0 0 20 18" aria-hidden="true" className="absolute -top-3.5 left-1/2 z-10 w-7 -translate-x-1/2 drop-shadow-md">
+            <path d="M4 0h12a4 4 0 0 1 4 4c0 1.2-.5 2.2-1.3 3L10 17 1.3 7A4 4 0 0 1 4 0Z" fill="var(--red)" />
+          </svg>
+
+          {/* The finger wheel: a paper disc with a bezel, and a finger hole for each slot. */}
+          <div className="absolute inset-0 rounded-full bg-paper shadow-object" style={{ transform: `rotate(${rot}deg)`, transition: ease }}>
+            <svg viewBox="0 0 200 200" aria-hidden="true" className="absolute inset-0 size-full">
+              <circle cx="100" cy="100" r="98.6" fill="none" stroke="var(--rule-strong)" strokeWidth="1.2" />
+              <circle cx="100" cy="100" r="95" fill="none" stroke="var(--rule)" strokeWidth="0.6" />
+              {Array.from({ length: n * 4 }, (_, i) =>
+                i % 4 ? <path key={i} d="M100 3.4V5.6" stroke="var(--rule-strong)" strokeWidth="0.7" transform={`rotate(${(i * 360) / (n * 4)} 100 100)`} /> : null,
+              )}
+            </svg>
+            {slots.map((s, i) => {
+              const on = i === chosen;
+              const label = s.kind === "add" ? "Add an account" : s.kind === "all" ? "All accounts" : s.account.name;
+              return (
+                <div key={i} className="absolute top-1/2 left-1/2 size-0" style={{ transform: `rotate(${i * step}deg) translateY(calc(var(--dial) * -0.355))` }}>
+                  <button
+                    id={`slot-${i}`}
+                    role="option"
+                    aria-selected={on}
+                    aria-label={label}
+                    title={label}
+                    type="button"
+                    onClick={() => (on ? enter(s) : turnTo(i))}
+                    style={{ transform: `translate(-50%, -50%) rotate(${-(i * step) - rot}deg)`, transition: ease }}
+                    className={`absolute grid size-[calc(var(--dial)*0.2)] place-items-center rounded-full bg-wash shadow-[inset_0_3px_7px_rgb(0_0_0/0.28),inset_0_-1px_0_rgb(255_255_255/0.7)] transition-[box-shadow,filter] duration-200 ${
+                      on ? "ring-[3px] ring-brand ring-offset-[3px] ring-offset-paper" : "grayscale-[0.65] hover:grayscale-0"
+                    }`}
+                  >
+                    {s.kind === "add" ? (
+                      <span className="grid size-[78%] place-items-center rounded-full border-2 border-dashed border-strong text-[calc(var(--dial)*0.06)] leading-none text-muted">+</span>
+                    ) : s.kind === "all" ? (
+                      <span className="flex -space-x-[calc(var(--dial)*0.025)]">
+                        {accounts.slice(0, 3).map((a) => (
+                          <Avatar key={a.handle} who={a} size={28} className="size-[calc(var(--dial)*0.075)]! ring-2 ring-wash" />
+                        ))}
+                      </span>
+                    ) : (
+                      <Avatar who={s.account} size={56} className="size-[84%]!" />
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* The number card in the middle stays still: who is chosen, and the way in. */}
+          <div className="absolute inset-[28%] grid place-items-center rounded-full bg-paper text-center text-ink shadow-[0_0_0_1px_var(--rule-strong),var(--lift)]">
+            <span aria-hidden="true" className="absolute inset-[5%] rounded-full border border-dashed border-line" />
+            <div className="relative grid justify-items-center gap-1 px-5" key={chosen}>
+              <p className="roll text-[11px] font-semibold tracking-[0.14em] text-muted uppercase">{slot.kind === "add" ? "New voice" : "Posting as"}</p>
+              <p className="roll text-xl leading-tight font-bold tracking-[-0.02em] sm:text-2xl">{slot.kind === "add" ? "Add an account" : slot.kind === "all" ? "All accounts" : slot.account.name}</p>
+              <p className="roll text-sm text-muted">{slot.kind === "add" ? "Teach alienX a new voice" : slot.kind === "all" ? stats() : `@${slot.account.handle}`}</p>
+              {slot.kind === "account" && <p className="roll text-xs text-muted max-sm:hidden!">{stats(slot.account.handle)}</p>}
+              <button type="button" className="btn btn-primary mt-2 px-6" onClick={() => enter()}>
+                {slot.kind === "add" ? "Add" : "Enter"}
+              </button>
+            </div>
+          </div>
+        </div>
       </main>
 
-      <footer className="flex flex-wrap items-center justify-center gap-3">
-        {accounts.length > 1 && (
-          <button type="button" className="btn btn-ground" onClick={() => onPick("all")}>
-            {accounts.length === 3 ? "All three" : `All ${accounts.length}`}
-          </button>
-        )}
-        <button type="button" className="link text-snow decoration-snow-line-strong" onClick={add}>
-          Add an account
-        </button>
-      </footer>
+      <span />
       {accountsDialog}
     </div>
   );

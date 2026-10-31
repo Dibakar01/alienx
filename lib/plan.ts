@@ -89,7 +89,10 @@ export async function research(handle: string, now = new Date()): Promise<Topic[
 
 // One topic becomes one scheduled post with its image. The five variants are drafted as
 // usual and the one in the topic's angle is kept; the others stay in the drafts table.
-export async function draftTopic(topicId: number): Promise<Post> {
+// `onlyIfFree` (alienX's pick) books nothing when the account gained a post while drafting:
+// a second pick running at the same time, or one approved meanwhile. The check and the insert
+// run back to back with nothing awaited between them.
+export async function draftTopic(topicId: number, onlyIfFree = false): Promise<Post | null> {
   const topic = getTopic(topicId);
   if (topic.status !== "proposed") throw new Error(`That topic is already ${topic.status}.`);
   const drafts = await generate({
@@ -100,6 +103,7 @@ export async function draftTopic(topicId: number): Promise<Post> {
     research: topic.findings,
   });
   const pick = drafts.find((d) => d.angle === topic.angle) ?? drafts[0]!;
+  if (onlyIfFree && takenSlots(topic.handle, new Date().toISOString()).length) return null;
   const post = createPost({
     handle: topic.handle,
     draft_id: pick.id,
@@ -107,7 +111,8 @@ export async function draftTopic(topicId: number): Promise<Post> {
     posts: pick.posts,
     claims: pick.claims,
     source: "plan",
-    scheduled_at: slotFor(topic.handle),
+    // A pick nobody approved yet gets at least three hours on the calendar to be looked at.
+    scheduled_at: slotFor(topic.handle, onlyIfFree ? new Date(Date.now() + 3 * 3600_000) : undefined),
   });
   setTopic(topic.id, "drafted");
   try {
@@ -116,6 +121,38 @@ export async function draftTopic(topicId: number): Promise<Post> {
     console.error(`post #${post.id}: no image yet (${e instanceof Error ? e.message : e})`);
     return post;
   }
+}
+
+// alienX's pick: every account with a voice keeps at least one approved post ahead of it.
+// When nothing is coming, the best waiting idea (discovering some first if none wait) is
+// drafted, illustrated and booked into the next slot the cadence allows (config/slots.json:
+// per day, per week and the gap). It never posts; the Studio still waits for a tap.
+export async function pickFor(handle: string, now = new Date()): Promise<Post | null> {
+  const account = readAccount(handle);
+  const voiced = account.profile ?? (account.inherits ? readAccount(account.inherits).profile : undefined);
+  if (!voiced || takenSlots(handle, now.toISOString()).length) return null;
+  let ideas = listTopics("proposed").filter((t) => t.handle === handle);
+  if (!ideas.length) ideas = await research(handle, now);
+  // A mix: not the same angle as the last idea it drafted, when another is waiting.
+  const last = listTopics("drafted").find((t) => t.handle === handle)?.angle;
+  const best = ideas.find((t) => t.angle !== last) ?? ideas[0];
+  return best ? draftTopic(best.id, true) : null;
+}
+
+// The daily run: one pick per account that needs one, one after another.
+export async function daily(only?: string): Promise<number> {
+  let failed = 0;
+  for (const { handle } of only ? [{ handle: only }] : listAccounts()) {
+    try {
+      const post = await pickFor(handle);
+      console.log(post ? `@${handle}: picked #${post.id} for ${post.scheduled_at}` : `@${handle}: already has a post ahead`);
+    } catch (e) {
+      failed++;
+      console.error(`@${handle}: no pick today (${e instanceof Error ? e.message : e})`);
+    }
+  }
+  if (failed) osascript(`alienX could not choose today's pick for ${failed === 1 ? "1 account" : `${failed} accounts`}. Open Create to pick one.`);
+  return failed;
 }
 
 // The weekly run. Accounts go one after another because they share one subscription
@@ -129,7 +166,7 @@ export async function plan(opts: { only?: string; researchOnly?: boolean } = {})
       console.log(`@${handle}: ${topics.length} topics`);
       if (opts.researchOnly) continue;
       for (const t of topics) {
-        const post = await draftTopic(t.id);
+        const post = (await draftTopic(t.id))!;
         console.log(`  #${post.id} at ${post.scheduled_at}: ${post.posts[0]}`);
       }
     } catch (e) {

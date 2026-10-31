@@ -1,7 +1,7 @@
 // A post as it will look in the X feed (dark theme): who, the text with its line breaks,
 // the image, and the action row. Read-only; it is there so nothing about the post is a
 // surprise once it is out.
-import { Mascot } from "./mascot.tsx";
+import { Avatar } from "./avatar.tsx";
 
 const ICON = {
   reply: "M8 10h8M8 14h5M21 12a8 8 0 0 1-11.8 7L4 20l1.1-4.6A8 8 0 1 1 21 12z",
@@ -13,9 +13,7 @@ const ICON = {
 export function XPreview({ name, handle, brand, text, image, note }: { name: string; handle: string; brand: boolean; text: string; image?: string | null; note?: string }) {
   return (
     <article aria-label="How this post will look on X" className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-x-3 rounded-[14px] border border-snow-line bg-ground p-3.5 text-snow">
-      <span className={`grid size-10 place-items-center rounded-full font-bold ${brand ? "bg-brand" : "bg-panel"}`} aria-hidden="true">
-        {brand ? <Mascot className="size-6 text-snow" /> : name.slice(0, 1)}
-      </span>
+      <Avatar who={{ handle, name, type: brand ? "brand" : "personal" }} size={40} />
       <div className="grid min-w-0 gap-2">
         <p className="flex min-w-0 items-baseline gap-1.5 text-[15px] leading-tight">
           <span className="truncate font-bold">{name}</span>

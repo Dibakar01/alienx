@@ -8,7 +8,8 @@ import { LIMIT, problems, weighted } from "../lib/post.ts";
 import { when } from "../lib/time.ts";
 import type { AccountInfo } from "./accounts.tsx";
 import { changePostAction } from "./actions.ts";
-import { Shiny } from "./bits/ShinyText.tsx";
+import { startJob } from "./activity.tsx";
+import { Working } from "./working.tsx";
 import { XPreview } from "./x-preview.tsx";
 
 const SOURCE: Record<string, string> = { facts: "facts", seed: "your thought", research: "research", unverified: "unverified" };
@@ -36,7 +37,7 @@ export function PostDetail({
   const [posts, setPosts] = useState<string[]>([]);
   const [page, setPage] = useState(0);
   const [art, setArt] = useState("");
-  const [drawing, setDrawing] = useState(false);
+  const [drawing, setDrawing] = useState(0); // when a redraw started, 0 when idle
   const [error, setError] = useState("");
   const [busy, start] = useTransition();
 
@@ -64,12 +65,14 @@ export function PostDetail({
   const unverified = post.claims.filter((c) => c.source === "unverified").length;
 
   const redraw = async () => {
-    setDrawing(true);
+    const done = startJob({ handle: post.handle, label: `Drawing a new picture for @${post.handle}`, kind: "picture", where: "week", typical: 35 });
+    setDrawing(Date.now());
     setError("");
     const r = (await fetch("/api/art", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: post.id }) })
       .then((x) => x.json())
       .catch((e: unknown) => ({ error: String(e) }))) as { post?: Post; error?: string };
-    setDrawing(false);
+    setDrawing(0);
+    done(r.error || !r.post ? { ok: false, text: "The new picture did not draw." } : { ok: true, text: "New picture ready." });
     if (r.error || !r.post) return setError(r.error ?? "No image came back.");
     setArt(String((r.post.art as { seed: number }).seed) + "-" + Date.now());
   };
@@ -115,7 +118,7 @@ export function PostDetail({
             </h2>
             <p className="text-sm text-muted">
               {posted ? "Posted." : post.status === "due" ? <span className="font-semibold text-brand">Due now. Post it when you are ready.</span> : `Goes out ${when(post.scheduled_at)} IST, unless you change it.`}{" "}
-              {post.source === "plan" ? "From a discovered idea." : "From your own idea."}
+              {post.picked ? "alienX picked this idea and approved it for you. Change it, move it or remove it before then." : post.source === "plan" ? "From a discovered idea." : "From your own idea."}
               {post.angle ? ` ${post.angle[0]!.toUpperCase()}${post.angle.slice(1)}` : ""}
               {post.pillar ? ` · ${post.pillar}.` : post.angle ? "." : ""}
             </p>
@@ -138,17 +141,17 @@ export function PostDetail({
               image={art ? `/api/art?id=${post.id}&v=${art}` : null}
               note={drawing ? " " : "No image yet. Draw one below."}
             />
-            {drawing && (
-              <span className="absolute inset-0 grid place-items-center text-sm font-semibold">
-                <span className="sheet px-4 py-2">
-                  <Shiny text="Drawing the picture. About half a minute." />
+            {drawing > 0 && (
+              <span className="absolute inset-0 grid place-items-center p-4">
+                <span className="sheet max-w-xs px-4 py-3">
+                  <Working compact kind="picture" title="Drawing the picture" note="Picking a visual metaphor for the post, then drawing it. About half a minute." since={drawing} />
                 </span>
               </span>
             )}
           </div>
           <figcaption className="flex flex-wrap items-center gap-2">
             {!posted && (
-              <button type="button" className="btn" onClick={redraw} disabled={drawing}>
+              <button type="button" className="btn" onClick={redraw} disabled={drawing > 0}>
                 {art ? "Draw again" : "Draw the image"}
               </button>
             )}

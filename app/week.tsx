@@ -9,6 +9,7 @@ import type { Finding, Post } from "../lib/db.ts";
 import { addDays, at, clock, dayName, local, ZONE } from "../lib/time.ts";
 import type { AccountInfo } from "./accounts.tsx";
 import { changePostAction } from "./actions.ts";
+import { Avatar } from "./avatar.tsx";
 import { Mascot } from "./mascot.tsx";
 import { PostDetail } from "./post-detail.tsx";
 import { ViewTitle } from "./title.tsx";
@@ -19,7 +20,21 @@ const spring = (token = "--spring") => (typeof window === "undefined" ? "ease-ou
 // Where a card was when it was dropped, so it can travel from there into its new cell.
 const flights = new Map<number, DOMRect>();
 
-export function Week({ accounts, posts, sources, now }: { accounts: AccountInfo[]; posts: Post[]; sources: Record<number, Finding[]>; now: string }) {
+export function Week({
+  accounts,
+  posts,
+  sources,
+  now,
+  onAbout,
+  onStart,
+}: {
+  accounts: AccountInfo[];
+  posts: Post[];
+  sources: Record<number, Finding[]>;
+  now: string;
+  onAbout?: () => void;
+  onStart?: () => void;
+}) {
   const today = local(new Date(now), ZONE).day;
   const [offset, setOffset] = useState(0);
   const [pick, setPick] = useState(0); // the day shown on a phone
@@ -92,7 +107,9 @@ export function Week({ accounts, posts, sources, now }: { accounts: AccountInfo[
   return (
     <div className="grid h-full grid-rows-[auto_1fr] gap-3 p-2 pb-24 sm:p-3 sm:pb-24 lg:gap-4 lg:px-8 lg:pt-5">
       <header className="flex flex-wrap items-center gap-x-4 gap-y-2 pr-14">
-        <Mascot className="size-8 text-brand" />
+        <button type="button" onClick={onAbout} aria-label="About alienX" className="rounded-full">
+          <Mascot className="size-8 text-brand" />
+        </button>
         <div className="min-w-0">
           <ViewTitle name="Studio" who={solo ? accounts[0]!.name : accounts.length === 3 ? "all three" : "all accounts"} />
           <p className="text-sm text-snow-muted">
@@ -117,7 +134,7 @@ export function Week({ accounts, posts, sources, now }: { accounts: AccountInfo[
         </div>
       </header>
 
-      <main className="sheet tape grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2 p-3 sm:grid-rows-[minmax(0,1fr)] sm:p-5 lg:mx-auto lg:w-full lg:max-w-7xl">
+      <main className="sheet tape mt-2 grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2 p-3 sm:grid-rows-[minmax(0,1fr)] sm:p-5 lg:mx-auto lg:w-full lg:max-w-7xl">
         {/* Phone: the seven days as chips; the chosen one is shown below. Cards can be dropped on a chip. */}
         <div className="flex gap-1 overflow-x-auto [scrollbar-width:none] sm:hidden" role="tablist" aria-label="Day">
           {days.map((d, i) => (
@@ -132,6 +149,13 @@ export function Week({ accounts, posts, sources, now }: { accounts: AccountInfo[
             >
               {dayName(d, { weekday: "short" })}
               <span className="block text-sm tabular-nums">{dayName(d, { day: "numeric" })}</span>
+              {/* A dot under each day that holds a post: red when one is due. */}
+              <span
+                aria-hidden="true"
+                className={`mx-auto mt-0.5 block size-1.5 rounded-full ${
+                  live.some((p) => dayOf(p) === d && p.status === "due") ? "bg-brand" : live.some((p) => dayOf(p) === d) ? (pick === i ? "bg-paper" : "bg-ink") : "bg-transparent"
+                }`}
+              />
             </button>
           ))}
         </div>
@@ -152,7 +176,9 @@ export function Week({ accounts, posts, sources, now }: { accounts: AccountInfo[
           {accounts.map((a) => (
             <Row key={a.handle}>
               <div className={`flex flex-col justify-center gap-0.5 border-b border-line py-2 max-sm:flex-row max-sm:items-baseline max-sm:gap-2 max-sm:py-1 ${solo ? "hidden" : ""}`}>
-                <span className="truncate text-sm font-semibold">@{a.handle}</span>
+                <span className="flex min-w-0 items-center gap-2 truncate text-sm font-semibold">
+                  <Avatar who={a} size={26} />@{a.handle}
+                </span>
                 <span className="truncate text-xs text-muted">{a.type === "brand" ? "brand" : a.name}</span>
               </div>
               {days.map((d, i) => {
@@ -178,9 +204,15 @@ export function Week({ accounts, posts, sources, now }: { accounts: AccountInfo[
 
       {live.length === 0 && (
         <div className="pointer-events-none absolute inset-0 grid place-items-center pb-24">
-          <p className="sheet sheet-b px-6 py-4 text-center text-sm">
-            Nothing on the calendar yet. Approve a draft in Create and it lands here.
-          </p>
+          <div className="sheet sheet-b pointer-events-auto grid max-w-sm justify-items-center gap-3 px-6 py-5 text-center text-sm">
+            <p className="font-semibold">Nothing on the calendar yet.</p>
+            <p className="text-muted">alienX books one pick a day for each account with a voice. Or start one yourself: pick an idea, approve a draft, and it lands here.</p>
+            {onStart && (
+              <button type="button" className="btn btn-primary" onClick={onStart}>
+                Start at 1 Idea
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -341,7 +373,14 @@ function Card({
       <span className="flex flex-wrap gap-1 text-[11px] leading-tight">
         {post.angle && <span className="rounded-[4px] bg-wash px-1 py-px font-semibold">{post.angle}</span>}
         {post.pillar && <span className="rounded-[4px] bg-wash px-1 py-px text-muted">{post.pillar}</span>}
-        <span className="rounded-[4px] px-1 py-px text-muted">{post.source === "plan" ? "from an idea" : "your idea"}</span>
+        {post.picked ? (
+          <span className="flex items-center gap-1 rounded-[4px] bg-brand px-1 py-px font-semibold text-white">
+            <Mascot className="size-2.5" />
+            alienX pick
+          </span>
+        ) : (
+          <span className="rounded-[4px] px-1 py-px text-muted">{post.source === "plan" ? "from an idea" : "your idea"}</span>
+        )}
       </span>
       <span className={`font-post leading-snug ${big ? "line-clamp-5 text-sm" : "line-clamp-2 text-xs"}`}>{post.posts[0]}</span>
     </button>

@@ -5,6 +5,20 @@
 // opened and closed, so a save keeps running when it is closed.
 import { useActionState, useEffect, useState } from "react";
 import { type FormState, addSamplesAction, saveAccountAction } from "./actions.ts";
+import { startJob } from "./activity.tsx";
+import { Working } from "./working.tsx";
+
+// While a save is studying a voice, it shows in the activity pill on every screen.
+function useJobWhile(pending: boolean, label: string) {
+  const [since, setSince] = useState(0);
+  useEffect(() => {
+    if (!pending) return setSince(0);
+    setSince(Date.now());
+    const done = startJob({ label, kind: "draft", typical: 90 });
+    return () => done();
+  }, [pending, label]);
+  return since;
+}
 
 export type AccountInfo = {
   handle: string;
@@ -85,6 +99,7 @@ function AddAccount({ hidden, handles, onDone }: { hidden: boolean; handles: str
   const [state, action, pending] = useActionState(saveAccountAction, null);
   // The submit button only looks ready once the required fields are filled.
   const [valid, setValid] = useState(false);
+  const since = useJobWhile(pending, "Studying a new account's voice");
   useEffect(() => {
     if (state?.handle) onDone(state.handle);
     // Only a new result counts. The form stays mounted, so a fresh onDone each render must not re-fire it.
@@ -149,12 +164,28 @@ function AddAccount({ hidden, handles, onDone }: { hidden: boolean; handles: str
         </label>
         <textarea id="new_samples" name="x_samples" rows={3} className="field resize-none font-post" />
       </div>
+      {/* Coming soon: upload writing to study. A placeholder for now; nothing is sent. */}
+      <div className="grid gap-2">
+        <span className="label">Or upload writing</span>
+        <div aria-disabled="true" className="grid place-items-center gap-1 rounded-[10px] border border-dashed border-strong bg-wash px-4 py-5 text-center">
+          <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 text-muted" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
+          </svg>
+          <span className="text-sm font-semibold text-muted">Drop essays, posts or a PDF here</span>
+          <span className="rounded-[6px] bg-white px-2 py-0.5 text-xs font-semibold text-muted">Coming soon</span>
+        </div>
+      </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <button type="submit" className="btn btn-dark" disabled={pending || !valid}>
-          {pending ? "Studying the human." : "Save and study"}
+          {pending ? "Studying…" : "Save and study"}
         </button>
-        <span className="text-sm text-muted">{pending ? "Reading the source, then learning the voice. About a minute." : valid ? "" : "Needs a handle and a name."}</span>
+        <span className="text-sm text-muted">{pending ? "" : valid ? "" : "Needs a handle and a name."}</span>
       </div>
+      {pending && (
+        <div className="rounded-[10px] bg-wash p-3">
+          <Working compact kind="draft" title="Studying the human." note="Reading the source, then learning the voice. About a minute or two; you can close this and keep working." since={since} />
+        </div>
+      )}
       <Result state={state} />
     </form>
   );
@@ -162,6 +193,7 @@ function AddAccount({ hidden, handles, onDone }: { hidden: boolean; handles: str
 
 function PastPosts({ hidden, accounts, who, onWho }: { hidden: boolean; accounts: AccountInfo[]; who: string; onWho: (handle: string) => void }) {
   const [state, action, pending] = useActionState(addSamplesAction, null);
+  const since = useJobWhile(pending, "Rebuilding a voice from past posts");
   const [valid, setValid] = useState(false);
   // A saved form is cleared, so it is not ready again until something is pasted.
   useEffect(() => setValid(false), [state]);
@@ -195,10 +227,15 @@ function PastPosts({ hidden, accounts, who, onWho }: { hidden: boolean; accounts
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <button type="submit" className="btn btn-dark" disabled={pending || !valid}>
-          {pending ? "Studying the human." : "Add and rebuild"}
+          {pending ? "Studying…" : "Add and rebuild"}
         </button>
-        <span className="text-sm text-muted">{pending ? "About a minute." : valid ? "" : "Paste at least one post."}</span>
+        <span className="text-sm text-muted">{pending ? "" : valid ? "" : "Paste at least one post."}</span>
       </div>
+      {pending && (
+        <div className="rounded-[10px] bg-wash p-3">
+          <Working compact kind="draft" title="Studying the human." note="Adding the posts and rebuilding the voice. About a minute." since={since} />
+        </div>
+      )}
       <Result state={state} />
     </form>
   );

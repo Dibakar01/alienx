@@ -25,10 +25,11 @@ The first screen explains alienX, then walks you through adding your accounts. F
 - **Drafts written for X.** Five drafts per idea or thought, one per angle (story, contrarian, observation, lesson, question). The rules follow X's open-source ranker, which favours replies, quotes, shares and read-through over likes. Each draft gets a hook first line, short lines, one concrete detail, an ending worth answering or forwarding, and no link (the source goes in a ready-made first reply). Code checks length the way X counts it, the shape, and the style rules. Every claim is tagged facts, your thought, research (with its link) or unverified.
 - **Images.** The model plans a visual metaphor, choosing objects and a composition (hero, versus, twist, scale, odd one out) with at most three words on the image. Code draws it deterministically as an SVG in the Qalakaar One Flow scrapbook style, and headless Chrome turns it into a 1600×900 PNG.
 - **Schedule.** India-time windows per account, at most one post a day, three hours apart, three a week (`config/slots.json`). A one-minute clock marks posts due and sends a macOS notification.
-- **The app, in the order you use it.** A landing page explains alienX once, then you pick who is posting (one account, or all of them). The dock holds two views:
-  - **1 Create** is where a post gets made: start from an idea alienX discovered or your own thought, get five drafts in the account's voice (each shown as it will look on X), and approve one.
-  - **2 Studio** is the calendar of approved posts, each with its picture, sources, first reply and tags (angle, pillar, origin). Open one to post it with one tap, drag it to another day, edit it, redraw its picture, or kill it.
-  Nothing reaches the calendar without a founder's approval.
+- **alienX's pick.** Once a day, every account with a voice and nothing coming gets one approved post: alienX takes its best waiting idea (discovering some first if none wait, and mixing angles), drafts it, draws it and books the next slot the cadence allows, at least three hours out. It shows on the calendar as "alienX pick" until you change or approve it. It runs when you open a profile and, with the agents installed, every morning at 07:30.
+- **The app, in the order you use it.** A landing page explains alienX once (the alien mark at the top left brings it back), then you turn the dial to who is posting (one account, all of them, or Add an account). The dock walks through three numbered steps:
+  - **1 Idea** and **2 Approve** are the two halves of Create: start from an idea alienX discovered or your own thought, get five drafts in the account's voice (each shown as it will look on X), and approve one.
+  - **3 Studio** is the calendar of approved posts, each with its picture, sources, first reply and tags (angle, pillar, origin). Open one to post it with one tap, drag it to another day, edit it, redraw its picture, or kill it.
+  Nothing reaches the calendar without a founder's approval, except alienX's one daily pick, and nothing is ever posted without your tap.
 
 ## Private data stays out of git
 
@@ -42,7 +43,7 @@ npm test
 npm run typecheck
 ```
 
-To keep it running in the background (the server, the one-minute clock that marks posts due, and the Sunday research), run `scripts/agents.sh`. It installs three launchd agents for your user; `scripts/agents.sh remove` uninstalls them. Without them, the clock and the weekly research only run while `npm run local` is open, or when you run `npm run tick` and `npm run plan` yourself.
+To keep it running in the background (the server, the one-minute clock that marks posts due, the Sunday research and the daily pick), run `scripts/agents.sh`. It installs four launchd agents for your user; `scripts/agents.sh remove` uninstalls them. Without them, the clock and the weekly research only run while `npm run local` is open, or when you run `npm run tick` and `npm run plan` yourself.
 
 ## Put it online (optional)
 
@@ -63,4 +64,4 @@ The app also refuses any request addressed to a host other than its own (`proxy.
 
 - [Phosphor Icons](https://phosphoricons.com) (MIT), the objects in the images; see `brand/icons/LICENSE-phosphor.txt`.
 - [Outfit](https://fonts.google.com/specimen/Outfit) (SIL OFL 1.1); see `brand/fonts/OFL.txt`.
-- [React Bits](https://reactbits.dev) (MIT): Dock and ShinyText, adapted in `app/bits/`.
+- [React Bits](https://reactbits.dev) (MIT): the Dock, adapted in `app/bits/`.
