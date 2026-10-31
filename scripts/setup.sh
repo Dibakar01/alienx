@@ -24,5 +24,5 @@ echo; echo "Your private files (git-ignored, they stay on this Mac):"
 [ -f knowledge/qalakaar-facts.md ] && ok "knowledge/qalakaar-facts.md already there" || { cp knowledge/qalakaar-facts.example.md knowledge/qalakaar-facts.md; ok "knowledge/qalakaar-facts.md created: fill in your company's facts"; }
 mkdir -p voices data
 
-echo; echo "Ready. Start it with:  npm run local"
+echo; echo "Ready. Open it with:  npm run open   (or make a one-click app: npm run app)"
 echo "Then add your accounts on the first screen."

@@ -572,3 +572,88 @@ dialog[open] > .sheet {
     scale: 1;
   }
 }
+
+/* Home's small moving pictures. Slow loops, transform and opacity only, still under
+   reduced motion (then each shows its finished state). */
+.v-find .glass {
+  animation: glide 5s var(--ease-standard) infinite;
+}
+@keyframes glide {
+  0%, 100% { translate: 0 0; }
+  45%, 60% { translate: 62px 4px; }
+}
+.v-find .hot {
+  opacity: 0;
+  animation: hot 5s var(--ease-standard) infinite;
+}
+@keyframes hot {
+  0%, 40% { opacity: 0; }
+  50%, 85% { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+.v-write .ink {
+  stroke-dasharray: 120;
+  stroke-dashoffset: 120;
+  animation: ink 5s var(--ease-out) infinite;
+}
+@keyframes ink {
+  0% { stroke-dashoffset: 120; opacity: 1; }
+  30%, 85% { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+.v-write .pen {
+  animation: pen 5s var(--ease-standard) infinite;
+}
+@keyframes pen {
+  0%, 100% { translate: -96px -40px; }
+  30% { translate: 0 -40px; }
+  45% { translate: -96px -8px; }
+  70% { translate: -40px 8px; }
+}
+.v-pic .pop {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pop 5s var(--spring-bounce) infinite;
+}
+@keyframes pop {
+  0% { opacity: 0; scale: 0.6; rotate: -8deg; }
+  20%, 90% { opacity: 1; scale: 1; rotate: 0deg; }
+  100% { opacity: 0; scale: 1; }
+}
+.v-pic .arrow {
+  stroke-dasharray: 90;
+  stroke-dashoffset: 90;
+  animation: arrow 5s var(--ease-out) infinite;
+}
+@keyframes arrow {
+  0%, 30% { stroke-dashoffset: 90; }
+  50%, 90% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+.v-post .card {
+  animation: drop 5s var(--spring-bounce) infinite;
+}
+@keyframes drop {
+  0% { translate: -40px -70px; rotate: -10deg; opacity: 0; }
+  10% { opacity: 1; }
+  35%, 92% { translate: 0 0; rotate: 0deg; opacity: 1; }
+  100% { opacity: 0; }
+}
+.v-post .stamp-art {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: stampin 5s var(--spring-bounce) infinite;
+}
+@keyframes stampin {
+  0%, 45% { opacity: 0; scale: 1.6; rotate: -14deg; }
+  58%, 92% { opacity: 1; scale: 1; rotate: -6deg; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .v-find .glass, .v-find .hot, .v-write .ink, .v-write .pen, .v-pic .pop, .v-pic .arrow, .v-post .card, .v-post .stamp-art {
+    animation: none;
+  }
+  .v-write .ink, .v-pic .arrow { stroke-dashoffset: 0; }
+  .v-find .hot { opacity: 0.85; }
+  .v-post .stamp-art { rotate: -6deg; }
+}

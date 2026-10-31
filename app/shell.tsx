@@ -11,12 +11,14 @@ import Dock from "./bits/Dock.tsx";
 import { Mascot } from "./mascot.tsx";
 import { Profiles } from "./profiles.tsx";
 import { ThemeIcon, useTheme } from "./theme.tsx";
+import { Landing } from "./landing.tsx";
 import { Studio } from "./studio.tsx";
 import { Topics } from "./topics.tsx";
 import { Week } from "./week.tsx";
 
-type View = "week" | "write" | "topics";
-const VIEWS: View[] = ["week", "write", "topics"];
+// In the order the work happens: what it is, find, write, schedule and post.
+type View = "home" | "topics" | "write" | "week";
+const VIEWS: View[] = ["home", "topics", "write", "week"];
 const STORE = "alienx.view";
 const PROFILE = "alienx.profile";
 // The order the profiles stand in: the brand first, then the founders.
@@ -28,12 +30,13 @@ const icon = (d: string) => (
   </svg>
 );
 const ICONS: Record<View, React.ReactNode> = {
+  home: icon("M4 11l8-6.5 8 6.5M6 9.5V20h12V9.5M10 20v-5h4v5"),
   // A week page with a pin; a pencil; a magnifier over a page.
   week: icon("M4 6.5h16v13H4zM4 10.5h16M8.5 4v4M15.5 4v4M8 14h2M12 14h2M16 14h0.5M8 17h2"),
   write: icon("M5 19l1-4L16.5 4.5a2 2 0 0 1 3 3L9 18zM14 7l3 3M5 19h14"),
   topics: icon("M10.5 17a6.5 6.5 0 1 1 4.6-1.9L20 20M8 10.5h5M10.5 8v5"),
 };
-const LABELS: Record<View, string> = { week: "Studio", write: "Write", topics: "Topics" };
+const LABELS: Record<View, string> = { home: "Home", topics: "1 Find", write: "2 Write", week: "3 Studio" };
 
 // One page, turning: when the browser can, a change of view or profile is a View Transition
 // (the old page slides out, the new one settles in on the spring); otherwise it just changes.
@@ -56,7 +59,9 @@ export function Shell({
   sources: Record<number, Finding[]>;
   now: string;
 }) {
-  const [view, setView] = useState<View>("week");
+  const [view, setView] = useState<View>("home");
+  // A first visit opens on Home; "Get started" moves on to choosing who is posting.
+  const [choosing, setChoosing] = useState(false);
   // Who is posting: one handle, "all", or nobody yet (the chooser shows). Each device remembers its own.
   const [profile, setProfile] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
@@ -79,7 +84,11 @@ export function Shell({
   }, []);
 
   const pick = (who: string | null) => {
-    turn(() => setProfile(who));
+    turn(() => {
+      setProfile(who);
+      // Coming from Home, the next thing to do is step 1.
+      if (who && view === "home") setView("topics");
+    });
     try {
       if (who) localStorage.setItem(PROFILE, who);
       else localStorage.removeItem(PROFILE);
@@ -125,7 +134,11 @@ export function Shell({
     return (
       <div className="h-dvh overflow-hidden">
         <h1 className="sr-only">alienX</h1>
-        <Profiles accounts={ordered} posts={posts} onPick={pick} />
+        {choosing || accounts.length === 0 ? (
+          <Profiles accounts={ordered} posts={posts} onPick={pick} />
+        ) : (
+          <Landing started={false} onStart={() => turn(() => setChoosing(true))} onGo={() => turn(() => setChoosing(true))} />
+        )}
         {themeSwitch}
       </div>
     );
@@ -137,12 +150,15 @@ export function Shell({
   const myTopics = topics.filter((t) => own(t.handle));
   const me = mine.length === 1 ? mine[0]! : null;
   const due = myPosts.filter((p) => p.status === "due").length;
-  const badges: Record<View, number> = { week: due, write: 0, topics: myTopics.length };
+  const badges: Record<View, number> = { home: 0, week: due, write: 0, topics: myTopics.length };
 
   return (
     <div className="relative h-dvh overflow-hidden">
       <h1 className="sr-only">alienX{me ? `, ${me.name}` : ", all accounts"}</h1>
       {/* Keyed by profile, so switching starts each view fresh for that account. */}
+      <div hidden={view !== "home"} className="view h-full">
+        <Landing started onStart={() => go("topics")} onGo={go} />
+      </div>
       <div hidden={view !== "week"} className="view h-full">
         <Week key={profile} accounts={mine} posts={myPosts} sources={sources} now={now} />
       </div>
@@ -150,7 +166,7 @@ export function Shell({
         <Studio key={profile} accounts={mine} onOpenStudio={() => go("week")} />
       </div>
       <div hidden={view !== "topics"} className="view h-full">
-        <Topics key={profile} accounts={mine} topics={myTopics} />
+        <Topics key={profile} accounts={mine} topics={myTopics} onOpenStudio={() => go("week")} />
       </div>
       <nav aria-label="Views">
         <Dock

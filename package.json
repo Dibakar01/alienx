@@ -14,7 +14,10 @@
     "tick": "node --env-file-if-exists=.env scripts/tick.ts",
     "plan": "node --env-file-if-exists=.env scripts/plan.ts",
     "setup": "bash scripts/setup.sh",
-    "local": "bash scripts/local.sh"
+    "local": "bash scripts/local.sh",
+    "open": "bash scripts/open.sh",
+    "stop": "bash scripts/stop.sh",
+    "app": "bash scripts/make-app.sh"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
