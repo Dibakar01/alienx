@@ -4,17 +4,19 @@ alienX runs a small team's X presence with the founders as editors. Each week it
 
 It is built for [Qalakaar](https://qalakaar.com) and its three accounts, and it runs on one Mac at no cost: model calls go through the Claude Code CLI on a Claude subscription, never a paid API.
 
-## Start in one line
+## Install in one line
 
-On a Mac with [Node 24+](https://nodejs.org), [Google Chrome](https://www.google.com/chrome) and the [Claude Code CLI](https://claude.com/claude-code) (signed in with your Claude plan):
+On a Mac with [Node 24+](https://nodejs.org), [Google Chrome](https://www.google.com/chrome) and the [Claude Code CLI](https://claude.com/claude-code) signed in with your Claude plan, paste this into Terminal:
 
 ```bash
-git clone https://github.com/Dibakar01/alienx.git && cd alienx && npm run setup && npm run local
+curl -fsSL https://raw.githubusercontent.com/Dibakar01/alienx/main/install.sh | bash
 ```
 
-`npm run setup` checks those three, installs packages, and creates your private settings from templates. It never overwrites a file you already have. `npm run local` builds alienX, starts it on this Mac only (http://127.0.0.1:3000) and opens it in your browser; Ctrl+C stops it. The first screen walks you through adding your accounts. Fill in `knowledge/qalakaar-facts.md` with your company's facts: alienX states nothing about the company beyond that file.
+It downloads alienX to `~/alienX`, checks the three requirements, installs it, adds an **alienX app** (with the alien icon) to your Applications folder, and opens it. After that, alienX is one click: open the app from Applications, Launchpad or Spotlight. It starts in the background if needed and opens in your browser, on this Mac only (http://127.0.0.1:3000). Run the same line again to update.
 
-In Safari, File > Add to Dock turns it into an app with its own window. Light and dark follow your system, and the switch in the top-right corner overrides that.
+Already cloned the repo? Double-click **alienX.command** in Finder, or run `npm run setup` once and then `npm run open`. Use `npm run app` to make the one-click app for that folder, and `npm run stop` to stop it.
+
+The first screen explains alienX, then walks you through adding your accounts. Fill in `knowledge/qalakaar-facts.md` with your company's facts: alienX states nothing about the company beyond that file. Light and dark follow your system; the switch in the top-right corner overrides that.
 
 ## How it works
 
@@ -23,10 +25,11 @@ In Safari, File > Add to Dock turns it into an app with its own window. Light an
 - **Drafts written for X.** Five drafts per topic or thought, one per angle (story, contrarian, observation, lesson, question). The rules follow X's open-source ranker, which favours replies, quotes, shares and read-through over likes. Each draft gets a hook first line, short lines, one concrete detail, an ending worth answering or forwarding, and no link (the source goes in a ready-made first reply). Code checks length the way X counts it, the shape, and the style rules. Every claim is tagged facts, your thought, research (with its link) or unverified.
 - **Images.** The model plans a visual metaphor, choosing objects and a composition (hero, versus, twist, scale, odd one out) with at most three words on the image. Code draws it deterministically as an SVG in the Qalakaar One Flow scrapbook style, and headless Chrome turns it into a 1600×900 PNG.
 - **Schedule.** India-time windows per account, at most one post a day, three hours apart, three a week (`config/slots.json`). A one-minute clock marks posts due and sends a macOS notification.
-- **Studio.** After the login comes a profile chooser (each account, or all three). Then there are three views, switched by a dock:
-  - **Studio** is the week of posts, where you can drag a post to another day or open it.
-  - **Write** turns a thought into drafts, with a preview of how each looks on X.
-  - **Topics** shows what the research proposed.
+- **The app, in the order you use it.** Home explains alienX, then you pick a profile (each account, or all of them). The dock holds four views, in order:
+  - **Home** explains what alienX does and how to use it.
+  - **1 Find** looks for what is new in the account's world and lists topics to draft, each with its sources and takeaway.
+  - **2 Write** turns a thought into five drafts, each shown as it will look on X.
+  - **3 Studio** is the week of posts: drag a post to another day, open it to edit, redraw its picture, or post it.
 
 ## Private data stays out of git
 

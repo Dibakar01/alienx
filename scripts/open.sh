@@ -10,7 +10,8 @@ if ! curl -s -o /dev/null "$url"; then
   # Rebuild when there is no build yet, or any code changed since the last one.
   if [ ! -f .next/BUILD_ID ] || [ -n "$(find app lib prompts config proxy.ts package.json -newer .next/BUILD_ID 2>/dev/null | head -1)" ]; then
     echo "Building alienX…"
-    npm run build --silent >/dev/null
+    mkdir -p data/logs
+    npm run build --silent > data/logs/build.log 2>&1 || { tail -30 data/logs/build.log; echo "The build failed; the full log is data/logs/build.log."; exit 1; }
   fi
   mkdir -p data/logs
   nohup npx next start -H 127.0.0.1 -p "$port" >> data/logs/server.log 2>&1 &

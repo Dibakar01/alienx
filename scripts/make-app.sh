@@ -30,7 +30,13 @@ HTML
       sips -z $s $s "$tmp/icon.png" --out "$tmp/alienX.iconset/icon_${s}x${s}.png" >/dev/null
       sips -z $((s * 2)) $((s * 2)) "$tmp/icon.png" --out "$tmp/alienX.iconset/icon_${s}x${s}@2x.png" >/dev/null
     done
-    iconutil -c icns "$tmp/alienX.iconset" -o "$app/Contents/Resources/applet.icns" && touch "$app"
+    iconutil -c icns "$tmp/alienX.iconset" -o "$app/Contents/Resources/applet.icns"
+    # Newer macOS reads the icon from Assets.car when CFBundleIconName is set; drop both so
+    # applet.icns (the alien) is used, then re-sign the app locally.
+    /usr/libexec/PlistBuddy -c "Delete :CFBundleIconName" "$app/Contents/Info.plist" 2>/dev/null || true
+    rm -f "$app/Contents/Resources/Assets.car"
+    codesign --force --deep --sign - "$app" >/dev/null 2>&1 || true
+    touch "$app"
   fi
   rm -r "$tmp"
 fi

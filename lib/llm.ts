@@ -88,8 +88,9 @@ export async function ask<T extends z.ZodType>(
   delete shape.$schema;
   const tools = (opts.tools ?? []).join(",");
 
+  // The program name comes from the environment, so the bundler is told not to trace it.
   const child = spawn(
-    process.env.CLAUDE_BIN ?? "claude",
+    /*turbopackIgnore: true*/ process.env.CLAUDE_BIN ?? "claude",
     [
       "-p",
       "--model", model,

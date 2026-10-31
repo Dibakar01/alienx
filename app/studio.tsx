@@ -293,7 +293,7 @@ export function Studio({ accounts, onOpenStudio }: { accounts: AccountInfo[]; on
         <section aria-label="The post" className={`flex min-h-0 flex-col gap-3 p-4 lg:border-l lg:border-line lg:p-6 ${face === "thought" ? "max-lg:hidden" : ""}`}>
           <Head n={3} shown={step(3)} current={current} title="Pick one">
             {/* On a phone the chosen author tab right below already names the account. */}
-            {viewSet && <p className="min-w-0 truncate text-sm text-muted max-sm:hidden">Approve or reject to teach @{view}.</p>}
+            {viewSet && <p className="min-w-0 truncate text-sm text-muted max-sm:hidden">Schedule or reject to teach @{view}.</p>}
           </Head>
 
           {authors.length > 1 && (
