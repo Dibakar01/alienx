@@ -2,9 +2,10 @@ import { sameOrigin } from "../../../lib/origin.ts";
 import { draftTopic, research } from "../../../lib/plan.ts";
 import { slowJson } from "../../../lib/respond.ts";
 
-// From the Topics view: { id } drafts, schedules and illustrates one topic; { research: handle }
-// runs this week's research for one account now (a few minutes, with web search). Both can
-// take longer than the tunnel waits for a first byte, so the reply is streamed.
+// { research: handle } discovers new ideas for one account now (Create's "Discover new ideas",
+// a few minutes with web search). { id } drafts, schedules and illustrates one idea without
+// the approval step; nothing in the app calls it, it is kept for scripts. Both can take
+// longer than the tunnel waits for a first byte, so the reply is streamed.
 export async function POST(request: Request): Promise<Response> {
   if (!sameOrigin(request)) return Response.json({ error: "Refused." }, { status: 403 });
   const body = ((await request.json().catch(() => ({}))) ?? {}) as { id?: unknown; research?: unknown };

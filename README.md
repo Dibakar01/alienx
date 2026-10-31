@@ -21,15 +21,14 @@ The first screen explains alienX, then walks you through adding your accounts. F
 ## How it works
 
 - **Voices.** `npm run ingest` pulls an account's own essays (`corpus/`), and `npm run profile` studies them into a voice profile (`voices/<handle>.json`). Pasted past X posts sharpen a profile.
-- **Research.** Every Sunday at 20:00 IST, `npm run plan` searches the web for each account (Claude Code's WebSearch and WebFetch tools), keeps 5 to 8 sourced findings, and proposes a few topics.
-- **Drafts written for X.** Five drafts per topic or thought, one per angle (story, contrarian, observation, lesson, question). The rules follow X's open-source ranker, which favours replies, quotes, shares and read-through over likes. Each draft gets a hook first line, short lines, one concrete detail, an ending worth answering or forwarding, and no link (the source goes in a ready-made first reply). Code checks length the way X counts it, the shape, and the style rules. Every claim is tagged facts, your thought, research (with its link) or unverified.
+- **Discover.** In Create, "Discover new ideas" (and, by itself, every Sunday at 20:00 IST) searches the web for each account (Claude Code's WebSearch and WebFetch tools), keeps 5 to 8 sourced findings from the last two weeks, and proposes a mix of ideas, each with why now and what the reader gets.
+- **Drafts written for X.** Five drafts per idea or thought, one per angle (story, contrarian, observation, lesson, question). The rules follow X's open-source ranker, which favours replies, quotes, shares and read-through over likes. Each draft gets a hook first line, short lines, one concrete detail, an ending worth answering or forwarding, and no link (the source goes in a ready-made first reply). Code checks length the way X counts it, the shape, and the style rules. Every claim is tagged facts, your thought, research (with its link) or unverified.
 - **Images.** The model plans a visual metaphor, choosing objects and a composition (hero, versus, twist, scale, odd one out) with at most three words on the image. Code draws it deterministically as an SVG in the Qalakaar One Flow scrapbook style, and headless Chrome turns it into a 1600×900 PNG.
 - **Schedule.** India-time windows per account, at most one post a day, three hours apart, three a week (`config/slots.json`). A one-minute clock marks posts due and sends a macOS notification.
-- **The app, in the order you use it.** Home explains alienX, then you pick a profile (each account, or all of them). The dock holds four views, in order:
-  - **Home** explains what alienX does and how to use it.
-  - **1 Find** looks for what is new in the account's world and lists topics to draft, each with its sources and takeaway.
-  - **2 Write** turns a thought into five drafts, each shown as it will look on X.
-  - **3 Studio** is the week of posts: drag a post to another day, open it to edit, redraw its picture, or post it.
+- **The app, in the order you use it.** A landing page explains alienX once, then you pick who is posting (one account, or all of them). The dock holds two views:
+  - **1 Create** is where a post gets made: start from an idea alienX discovered or your own thought, get five drafts in the account's voice (each shown as it will look on X), and approve one.
+  - **2 Studio** is the calendar of approved posts, each with its picture, sources, first reply and tags (angle, pillar, origin). Open one to post it with one tap, drag it to another day, edit it, redraw its picture, or kill it.
+  Nothing reaches the calendar without a founder's approval.
 
 ## Private data stays out of git
 
@@ -64,4 +63,4 @@ The app also refuses any request addressed to a host other than its own (`proxy.
 
 - [Phosphor Icons](https://phosphoricons.com) (MIT), the objects in the images; see `brand/icons/LICENSE-phosphor.txt`.
 - [Outfit](https://fonts.google.com/specimen/Outfit) (SIL OFL 1.1); see `brand/fonts/OFL.txt`.
-- [React Bits](https://reactbits.dev) (MIT): Dock, AnimatedList and ShinyText, adapted in `app/bits/`.
+- [React Bits](https://reactbits.dev) (MIT): Dock and ShinyText, adapted in `app/bits/`.

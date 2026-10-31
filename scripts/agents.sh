@@ -2,7 +2,7 @@
 # Installs alienX's three launchd agents for this user, then (re)starts them:
 #   com.qalakaar.alienx.server  builds once, then keeps `next start` running on 127.0.0.1:3000
 #   com.qalakaar.alienx.tick    every minute: posts whose slot came turn due, one notification
-#   com.qalakaar.alienx.plan    Sundays 20:00: research, draft and schedule the week
+#   com.qalakaar.alienx.plan    Sundays 20:00: discover new ideas for each account (approve them in Create)
 # Re-run after pulling changes: it rebuilds and restarts the server. Logs go to data/logs/.
 # Remove with: scripts/agents.sh remove
 set -euo pipefail
@@ -44,5 +44,5 @@ XML
 
 plist server '<key>RunAtLoad</key><true/><key>KeepAlive</key><true/>' $NPM start
 plist tick '<key>StartInterval</key><integer>60</integer>' $NODE --env-file-if-exists=.env scripts/tick.ts
-plist plan '<key>StartCalendarInterval</key><dict><key>Weekday</key><integer>0</integer><key>Hour</key><integer>20</integer><key>Minute</key><integer>0</integer></dict>' $NODE --env-file-if-exists=.env scripts/plan.ts
+plist plan '<key>StartCalendarInterval</key><dict><key>Weekday</key><integer>0</integer><key>Hour</key><integer>20</integer><key>Minute</key><integer>0</integer></dict>' $NODE --env-file-if-exists=.env scripts/plan.ts --research-only
 echo "alienX agents running. Site: http://127.0.0.1:3000  Logs: $ROOT/data/logs/"

@@ -573,7 +573,7 @@ dialog[open] > .sheet {
   }
 }
 
-/* Home's small moving pictures. Slow loops, transform and opacity only, still under
+/* The landing page's small moving pictures. Slow loops, transform and opacity only, still under
    reduced motion (then each shows its finished state). */
 .v-find .glass {
   animation: glide 5s var(--ease-standard) infinite;

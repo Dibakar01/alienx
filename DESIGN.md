@@ -207,9 +207,9 @@ components:
 
 alienX now follows the Qalakaar One Flow system (the "Qalakaar · one flow" canvas). The page is a dark ground. Work sits on torn paper sheets held down with a strip of tape, the way One Flow's landing pages lay their panels. Qalakaar red marks the one action on a sheet or the thing that needs you; ink is warm black on paper; pencil grey draws hand marks.
 
-The first screen is the profile chooser: "Who is posting?" over three taped sheets (Qalakaar with the red alien, Dibakar and Ansh with an ink initial), each with what is due, and a quiet "All three" key on the ground beneath. A profile then fills the screen with that account only, and the dock's last item (the profile's mark) returns to the chooser. Each view's title names the profile ("Studio · Dibakar").
+A landing page shows once on the way in: what alienX does in four steps (Discover, Draft, Approve, Post), each with a small moving scrapbook picture, and Get started. Then comes the profile chooser: "Who is posting?" over three taped sheets (Qalakaar with the red alien, Dibakar and Ansh with an ink initial), each with what is due, and a quiet "All three" key on the ground beneath. A profile then fills the screen with that account only, and the dock's last item (the profile's mark) returns to the chooser. Each view's title names the profile ("Studio · Dibakar").
 
-Three views share the ground, switched by a dock at the bottom: **Studio** (the week of scheduled posts), **Write** (a thought becomes drafts) and **Topics** (what the weekly research proposes). Each view fits the window; the page itself never scrolls. Long content opens over the view in a dialog.
+Two views share the ground, switched by a dock at the bottom, in the order the work happens: **1 Create** (ideas become drafts; approve one) and **2 Studio** (the calendar of approved posts, to post from). Each view fits the window; the page itself never scrolls. Long content opens over the view in a dialog. No screen carries a control that does not belong to its step: there is no Home in the app, and posting happens only in the Studio.
 
 The voice stays dry and short, with no exclamation marks. The fixed strings stay: "No drafts yet. Give me a thought to study.", "Studying the human.", "Signal lost. Try again."
 
@@ -223,7 +223,7 @@ The voice stays dry and short, with no exclamation marks. The fixed strings stay
 
 Every colour is defined once in `app/globals.css`. Mixes are written there with `color-mix`; nothing else in the project names a colour. The image renderer (`lib/art.ts`) draws pixels, not UI, and carries its own copy of the paper palette.
 
-- **Qalakaar Red** (`--red`): the one action on a sheet (Generate, Post to X, Draft this), chosen accounts, the step to do now, a due card's edge and its mark, the focus ring, the dock's indicator and badges.
+- **Qalakaar Red** (`--red`): the one action on a sheet (Generate, Approve, Draft this idea, Post to X), chosen accounts, the step to do now, a due card's edge and its mark, the focus ring, the dock's indicator and badges.
 - **Sheet** (`--white`): every surface you read or type on. **Ink** (`--black`): type on paper. **Paper** (`--paper`, also `--wash`): wells, image frames, quiet fills.
 - **Ground** (`--ground`): the page. **Snow** (`--snow`) and its mixes (`--snow-muted`, `--snow-faint`, `--snow-line`): type and lines on the ground. **Panel** (`--panel`) and **Glass** (`--glass`): the dock and the toast.
 - **Pencil** (`--pencil`): hand marks, the resting mascot, the shimmer of working text. **Tape** (`--tape`): tape strips only.
@@ -237,7 +237,7 @@ Every colour is defined once in `app/globals.css`. Mixes are written there with 
 
 Outfit only (One Flow), loaded by `next/font`. Draft text stays in the system sans (`--font-x`) so a draft looks the way it will on X.
 
-- **View title** (700, 20px, -0.022em): Studio, Write, Topics, and the post dialog's handle.
+- **View title** (700, 20px, -0.022em): Create and Studio, and the post dialog's handle.
 - **Heading** (500-700, 18px): the numbered steps in Write, a topic's title.
 - **Body** (400, 15px, -0.006em, 1.5) and **Small** (400, 14px): sentences and hints.
 - **Label** (600, 12px, sentence case): field labels, day names, card times, sources. Counts use tabular figures.
@@ -251,8 +251,7 @@ Each view is a two-row grid filling the window: a header (mascot, view title, on
 
 - **Profiles:** three sheets in a row (stacked rows on a phone), tilted a degree apart, straightening on hover.
 - **Studio:** one torn sheet holding a grid: seven day columns in India time; in All three, a 104px account column and one row per account; in a single profile, no account column and larger cards. A cell holds its posts as small paper cards (image, time, first line). On a phone, one day shows at a time, chosen from a row of day chips.
-- **Write:** the earlier two-faced object, now a taped sheet: who is posting, the thought and Generate on one face; the five drafts on the other.
-- **Topics:** a column of torn sheets, one per proposed topic, each with its sources and Draft this or Skip.
+- **Create:** one taped sheet with two faces. Left, "Start from an idea" with an Ideas / Your own switch: the discovered ideas (Discover new ideas, then cards with why now, what the reader gets, sources, Draft this idea or Skip), or your own thought with Single / Thread, topic chips and Generate. Right, "Choose and approve": the five drafts as X previews, Approve or Reject. On a phone the faces switch with Idea / Drafts.
 - **Post dialog:** a taped sheet over the dimmed view: the image left, the text, claims, sources, Move and the action row right; one column on a phone.
 
 Every tappable control is at least 44px tall on a coarse pointer or below 640px.
@@ -269,14 +268,13 @@ Torn edges for sheets (`--torn-a`, `--torn-b`, `--torn-c`, from One Flow's scrap
 
 - **Buttons:** outline on paper (`.btn`), solid red for the one action (`.btn-primary`), solid ink for a working button (`.btn-dark`, Schedule, Save changes), outline on the ground (`.btn-ground`). Keys go down 1px on pointer-down and pop back on `--ease-pop`.
 - **Post card:** paper, 6px corners, a 1px rule (red when due), tilted by up to 0.8 degrees and straightened on hover. Image at 16:9, then the time or "Due now" with a red square, then two lines of the post. Dragged, it follows the pointer from where it was grabbed and tilts 2 degrees; dropped, it travels into its new cell on `--spring`; dropped nowhere, it springs home.
-- **Dock** (React Bits Dock, colours from the tokens): Studio, Write, Topics with drawn line icons, a red indicator under the current view, red badges for posts due and topics waiting.
+- **Dock** (React Bits Dock, colours from the tokens): 1 Create and 2 Studio with drawn line icons, then the profile's mark, a red indicator under the current view, red badges for ideas waiting (Create) and posts due (Studio).
 - **Theme switch:** a round outline key fixed in the top-right corner of every screen, a sun in the dark and a moon in the light. Headers keep 56px clear for it.
 - **Page turn:** changing view or profile is one View Transition: the old page slides 16px left and fades fast, the new one settles in from the right on the spring, while the dock and the theme switch stay put.
-- **Write, simplified:** inside a profile there is no account step; the thought, a Single post / Thread switch, topic chips (Any topic or a pillar) and Generate. Drafts open on their X preview; Schedule is the red action and Post now the quiet one.
+- **Create, simplified:** inside a profile there is no account step. Drafts open on their X preview; Approve is the red action, and a draft can only be copied here, never posted.
 - **Toast:** dark panel above the dock, ten seconds, with Undo after a kill.
-- **Topic list** (React Bits AnimatedList, its demo data and icon library removed): each topic arrives on the list's spring.
 - **Working text** (React Bits ShinyText through `Shiny`): a pencil-to-ink shimmer on lines like "Drawing the hook." Plain text under reduced motion.
-- **Feed preview:** the post as X's dark feed will show it (avatar, name, handle, text with its line breaks, the image, the action row), in the post dialog and behind each Write draft's Edit / On X switch.
+- **Feed preview:** the post as X's dark feed will show it (avatar, name, handle, text with its line breaks, the image, the action row), in the post dialog and behind each Create draft's On X / Edit switch.
 - **Segmented switch:** a dark carriage that slides to its detent on the spring (Write's Edit / On X).
 - **First reply:** a paper well under the post's text holding its sources, with Copy first reply.
 - **Post to X:** red. On a laptop it copies the image and opens X with the text; on a phone it opens the share sheet with the image. Copy image and Download sit beside it.

@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import type { Draft } from "../lib/db.ts";
+import type { Draft, Topic } from "../lib/db.ts";
 import { LIMIT, problems, weighted } from "../lib/post.ts";
 import { type AccountInfo, Accounts, type Upkeep } from "./accounts.tsx";
 import { changePostAction, decideAction, scheduleAction } from "./actions.ts";
 import { when } from "../lib/time.ts";
+import { Ideas } from "./ideas.tsx";
 import { Mascot } from "./mascot.tsx";
 import { ViewTitle } from "./title.tsx";
 import { XPreview } from "./x-preview.tsx";
@@ -14,7 +15,8 @@ type Allow = { hashtags: boolean; emoji: boolean; banned: string[] };
 type Format = "single" | "thread";
 type Status = Draft["status"];
 // `asked` records the inputs a set was made from, so the page knows when Generate would repeat them.
-type DraftSet = { drafts: Draft[]; allow: Allow; asked: string };
+// `topicId` links drafts made from a discovered idea, so approving one keeps its sources.
+type DraftSet = { drafts: Draft[]; allow: Allow; asked: string; topicId?: number };
 
 const ANGLES: Record<string, string> = {
   story: "a small scene",
@@ -28,10 +30,17 @@ const STORE = "alienx.accounts";
 // One object on a quiet ground. The thought is on one face and the post on the other: side
 // by side on a laptop, one at a time on a phone. The page itself never scrolls; the two
 // text boxes take whatever height is left.
-export function Studio({ accounts, onOpenStudio }: { accounts: AccountInfo[]; onOpenStudio?: () => void }) {
+// Create: where a post gets made. Start from a discovered idea or your own, get five drafts
+// in your voice, approve one. Approving prepares its picture, sources and slot and puts it
+// on the Studio calendar.
+export function Studio({ accounts, topics = [], onOpenStudio }: { accounts: AccountInfo[]; topics?: Topic[]; onOpenStudio?: () => void }) {
   const ready = accounts.filter((a) => a.ready);
   const [chosen, setChosen] = useState<string[]>(ready.slice(0, 1).map((a) => a.handle));
   const [seed, setSeed] = useState("");
+  // Where the thought comes from: discovered ideas, or your own words.
+  const [startFrom, setStartFrom] = useState<"ideas" | "own">(topics.length ? "ideas" : "own");
+  // The discovered idea the thought came from, if any: its findings go with the drafts.
+  const [idea, setIdea] = useState<Topic | null>(null);
   const [format, setFormat] = useState<Format>("single");
   // The pillar picked for each account. None means any of that account's own pillars.
   const [pillarOf, setPillarOf] = useState<Record<string, string>>({});
@@ -86,7 +95,9 @@ export function Studio({ accounts, onOpenStudio }: { accounts: AccountInfo[]; on
   const step = (n: number) => (solo ? n - 1 : n);
   const hint = working
     ? "About half a minute."
-    : !picking.length
+    : solo && !ready.length
+      ? "No voice yet. Teach it with past posts first."
+      : !picking.length
       ? "Choose who is posting first."
       : !seed.trim()
         ? "Type a thought first."
@@ -116,9 +127,11 @@ export function Studio({ accounts, onOpenStudio }: { accounts: AccountInfo[]; on
   };
 
   // One request per account, all at once. Each account's tab fills in as its drafts land.
-  const run = (handles = picking) => {
+  const run = (handles = picking, from?: { seed: string; idea: Topic }) => {
+    const text = from?.seed ?? seed;
+    const source = from ? from.idea : idea;
     if (!handles.length) return setNudge(true);
-    if (!seed.trim()) {
+    if (!text.trim()) {
       thought.current?.focus();
       return setNudge(true);
     }
@@ -130,17 +143,36 @@ export function Studio({ accounts, onOpenStudio }: { accounts: AccountInfo[]; on
     for (const h of handles) {
       const account = accounts.find((a) => a.handle === h)!;
       const allow = { hashtags, emoji: account.emoji, banned: account.banned };
-      const asked = askFor(h);
-      const body = { handle: h, seed, format, pillar: pillarOf[h] || undefined, hashtags };
+      const asked = from ? JSON.stringify([text.trim(), format, source?.pillar ?? "", hashtags]) : askFor(h);
+      const fromIdea = source && source.handle === h ? source : null;
+      const body = {
+        handle: h,
+        seed: text,
+        format,
+        pillar: (from ? fromIdea?.pillar : pillarOf[h]) || undefined,
+        hashtags,
+        research: fromIdea?.findings ?? [],
+      };
       fetch("/api/generate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
         .then((r) => r.json() as Promise<{ drafts: Draft[] } | { error: string }>)
         .catch((e: unknown) => ({ error: String(e) }))
         .then((result) => {
           if ("error" in result) setErrors((e) => ({ ...e, [h]: result.error }));
-          else setSets((s) => ({ ...s, [h]: { drafts: result.drafts, allow, asked } }));
+          else setSets((s) => ({ ...s, [h]: { drafts: result.drafts, allow, asked, topicId: fromIdea?.id } }));
           setBusy((b) => ({ ...b, [h]: false }));
         });
     }
+  };
+
+  // An idea becomes the thought and is drafted at once, for the account it belongs to.
+  const draftIdea = (t: Topic) => {
+    const text = `${t.title}\n\n${t.why}`;
+    setIdea(t);
+    setSeed(text);
+    setStartFrom("own");
+    setPillarOf((x) => ({ ...x, [t.handle]: t.pillar ?? "" }));
+    if (!solo) choose([t.handle]);
+    run([t.handle], { seed: text, idea: t });
   };
 
   const label = working ? "Working on it." : repeat ? "Generate again" : picking.length ? `Generate ${picking.length * 5} drafts` : "Generate drafts";
@@ -150,8 +182,8 @@ export function Studio({ accounts, onOpenStudio }: { accounts: AccountInfo[]; on
       <header className="row-start-1 flex items-center gap-4 pr-14 max-lg:pb-2">
         <Mascot blink={working} className="size-8 text-brand" />
         <div>
-          <ViewTitle name="Write" who={accounts.length === 1 ? accounts[0]!.name : accounts.length === 3 ? "all three" : "all accounts"} />
-          <p className="text-sm text-snow-muted max-sm:hidden">A thought becomes five drafts. Schedule the one worth posting.</p>
+          <ViewTitle name="Create" who={accounts.length === 1 ? accounts[0]!.name : accounts.length === 3 ? "all three" : "all accounts"} />
+          <p className="text-sm text-snow-muted max-sm:hidden">Start from an idea, pick the best of five drafts, approve it. It goes to the Studio ready to post.</p>
         </div>
       </header>
 
@@ -167,7 +199,7 @@ export function Studio({ accounts, onOpenStudio }: { accounts: AccountInfo[]; on
                 onClick={() => setFace(f)}
                 className={`pill cursor-pointer rounded-card px-3.5 py-1.5 text-sm font-medium ${face === f ? "bg-ink text-paper" : "text-ink hover:bg-wash"}`}
               >
-                {f === "thought" ? "Thought" : "Post"}
+                {f === "thought" ? "Idea" : "Drafts"}
               </button>
             ))}
           </div>
@@ -216,20 +248,39 @@ export function Studio({ accounts, onOpenStudio }: { accounts: AccountInfo[]; on
             })}
           </div>
 
+          <div className={`flex min-h-0 flex-1 flex-col gap-3 ${solo ? "" : "mt-4"}`}>
+            <Head n={2} shown={step(2)} current={current} title="Start from an idea">
+              <span className="segmented" style={{ "--at": startFrom === "ideas" ? 0 : 1 } as React.CSSProperties} role="group" aria-label="Start from">
+                <span aria-hidden="true" />
+                <button type="button" aria-pressed={startFrom === "ideas"} onClick={() => setStartFrom("ideas")}>
+                  Ideas{topics.length ? ` · ${topics.length}` : ""}
+                </button>
+                <button type="button" aria-pressed={startFrom === "own"} onClick={() => setStartFrom("own")}>
+                  Your own
+                </button>
+              </span>
+            </Head>
+            {/* Kept mounted, so a discovery in progress keeps running while you write your own. */}
+            <div hidden={startFrom !== "ideas"} className="flex min-h-0 flex-1 flex-col">
+              <Ideas accounts={accounts} topics={topics} onDraft={draftIdea} drafting={working} />
+            </div>
           <form
-            className={`flex min-h-0 flex-1 flex-col gap-3 ${solo ? "" : "mt-4"}`}
+            hidden={startFrom !== "own"}
+            className="flex min-h-0 flex-1 flex-col gap-3"
             onSubmit={(e) => {
               e.preventDefault();
               run();
             }}
           >
-            <Head n={2} shown={step(2)} current={current} title="Your thought">
-              {solo && (
-                <button type="button" className="link" onClick={() => openUpkeep("posts", accounts[0]!.handle)}>
-                  Teach the voice
+            {idea && (
+              <p className="flex items-center gap-2 rounded-[10px] bg-wash px-3 py-2 text-sm">
+                <span className="text-muted">From the idea</span>
+                <span className="min-w-0 flex-1 truncate font-semibold">{idea.title}</span>
+                <button type="button" className="link" onClick={() => setIdea(null)} aria-label="Drop the idea's sources">
+                  Detach
                 </button>
-              )}
-            </Head>
+              </p>
+            )}
             <textarea
               ref={thought}
               id="thought"
@@ -239,6 +290,8 @@ export function Studio({ accounts, onOpenStudio }: { accounts: AccountInfo[]; on
               onChange={(e) => {
                 setSeed(e.target.value);
                 setNudge(false);
+                // A different thought drops the idea, so its sources never ride on an unrelated post.
+                if (idea && !e.target.value.includes(idea.title)) setIdea(null);
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -287,13 +340,19 @@ export function Studio({ accounts, onOpenStudio }: { accounts: AccountInfo[]; on
             <p className={`text-sm ${nudge ? "font-medium text-ink" : "text-muted"}`} aria-live="polite">
               {hint}
             </p>
+            {solo && (
+              <button type="button" className="link justify-self-start text-muted" onClick={() => openUpkeep("posts", accounts[0]!.handle)}>
+                Teach the voice with past posts
+              </button>
+            )}
           </form>
+          </div>
         </section>
 
         <section aria-label="The post" className={`flex min-h-0 flex-col gap-3 p-4 lg:border-l lg:border-line lg:p-6 ${face === "thought" ? "max-lg:hidden" : ""}`}>
-          <Head n={3} shown={step(3)} current={current} title="Pick one">
+          <Head n={3} shown={step(3)} current={current} title="Choose and approve">
             {/* On a phone the chosen author tab right below already names the account. */}
-            {viewSet && <p className="min-w-0 truncate text-sm text-muted max-sm:hidden">Schedule or reject to teach @{view}.</p>}
+            {viewSet && <p className="min-w-0 truncate text-sm text-muted max-sm:hidden">Approve one, or reject with a reason to teach @{view}.</p>}
           </Head>
 
           {authors.length > 1 && (
@@ -358,6 +417,7 @@ export function Studio({ accounts, onOpenStudio }: { accounts: AccountInfo[]; on
                   allow={set.allow}
                   picked={picked(h)}
                   account={accounts.find((a) => a.handle === h)}
+                  topicId={set.topicId}
                   onOpenStudio={onOpenStudio}
                   onDecided={(status) => setDecided((all) => ({ ...all, [d.id]: status }))}
                 />
@@ -421,6 +481,7 @@ function Card({
   picked,
   hidden,
   account,
+  topicId,
   onOpenStudio,
   onDecided,
 }: {
@@ -429,6 +490,7 @@ function Card({
   picked: boolean;
   hidden: boolean;
   account?: AccountInfo;
+  topicId?: number;
   onOpenStudio?: () => void;
   onDecided: (status: Status) => void;
 }) {
@@ -458,7 +520,7 @@ function Card({
     start(async () => {
       if (next === "draft" && scheduled) {
         // Undo takes the post off the schedule first; if it already went out, the draft stays scheduled.
-        const off = await changePostAction({ do: "kill", id: scheduled.id });
+        const off = await changePostAction({ do: "kill", id: scheduled.id, undo: true });
         if (off.error) return setFailed(true);
       }
       const result = await decideAction({ id: draft.id, status: next, posts, reason: next === "rejected" ? reason : undefined });
@@ -470,11 +532,11 @@ function Card({
       setRejecting(false);
     });
 
-  // Schedule: approve the draft and put it on the account's next free slot. Its image is
-  // drawn in the background and shows up in the Studio when it is ready.
+  // Approve: the draft goes on the account's next free slot in the Studio calendar, with its
+  // sources if it came from an idea; its picture is drawn in the background.
   const schedule = () =>
     start(async () => {
-      const result = await scheduleAction({ id: draft.id, handle: draft.handle, posts, claims: draft.claims });
+      const result = await scheduleAction({ id: draft.id, handle: draft.handle, topic_id: topicId, posts, claims: draft.claims });
       setFailed(Boolean(result.error));
       if (result.error || !result.post) return;
       setScheduled({ id: result.post.id, at: result.post.scheduled_at });
@@ -556,19 +618,19 @@ function Card({
                   {unverified === 1 ? "1 claim to check" : `${unverified} claims to check`}
                 </>
               ) : (
-                `${draft.claims.length === 1 ? "1 claim" : `${draft.claims.length} claims`}, from the facts or your thought`
+                `${draft.claims.length === 1 ? "1 claim" : `${draft.claims.length} claims`}, all sourced`
               )}
             </button>
             <div id={`claims-${draft.id}`} popover="auto" className="claims-pop">
               <p className="mb-3 text-sm">
                 {unverified > 0
-                  ? `${unverified === 1 ? "1 claim is" : `${unverified} claims are`} not in the facts or your thought. Check before posting.`
-                  : "Every claim traces to the facts or your thought."}
+                  ? `${unverified === 1 ? "1 claim is" : `${unverified} claims are`} not in the facts, your thought or the research. Check before posting.`
+                  : "Every claim traces to the facts, your thought or the research."}
               </p>
               <ul className="grid gap-2 text-sm">
                 {draft.claims.map((c, i) => (
                   <li key={i} className="grid gap-x-3 gap-y-0.5 sm:grid-cols-[6.5rem_minmax(0,1fr)]">
-                    <span className={c.source === "unverified" ? "tag justify-self-start" : "font-mono text-xs leading-5 text-muted"}>{c.source === "seed" ? "your thought" : c.source}</span>
+                    <span className={c.source === "unverified" ? "tag justify-self-start" : "font-mono text-xs leading-5 text-muted"}>{c.source === "seed" ? "your idea" : c.source}</span>
                     <span className={c.source === "unverified" ? "" : "text-muted"}>{c.text}</span>
                   </li>
                 ))}
@@ -582,13 +644,13 @@ function Card({
       <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
         {status !== "draft" ? (
           <>
-            <span className={`stamp ${status === "approved" ? "stamp-solid" : ""}`}>{status === "approved" && scheduled ? "scheduled" : status}</span>
-            {/* The sentence sits under the row, so Copy and Open in X stay where they were. On a phone
+            <span className={`stamp ${status === "approved" ? "stamp-solid" : ""}`}>{status}</span>
+            {/* The sentence sits under the row, so Copy stays where it was. On a phone
                 the stamp says it; the sentence stays for screen readers. */}
-            <span className="order-last basis-full text-sm text-muted max-sm:sr-only">{status === "approved" ? (scheduled ? `On the schedule for ${when(scheduled.at)} IST. Its image is being drawn.` : "Saved. The next drafts learn from this.") : "Saved with your reason. The next drafts avoid this."}</span>
+            <span className="order-last basis-full text-sm text-muted max-sm:sr-only">{status === "approved" ? (scheduled ? (topicId ? `Approved. Its picture, sources and first reply are being made, and it is on the Studio calendar for ${when(scheduled.at)} IST.` : `Approved. Its picture is being drawn, and it is on the Studio calendar for ${when(scheduled.at)} IST.`) : "Saved. The next drafts learn from this.") : "Saved with your reason. The next drafts avoid this."}</span>
             {scheduled && onOpenStudio && (
               <button type="button" className="link" onClick={onOpenStudio}>
-                See it in Studio
+                Open in Studio
               </button>
             )}
             <button type="button" className="link" disabled={busy} onClick={() => decide("draft")}>
@@ -623,26 +685,17 @@ function Card({
         ) : (
           <>
             <button type="button" className="btn btn-primary" disabled={busy || long >= 0} onClick={schedule}>
-              Schedule
+              Approve
             </button>
             <button type="button" className="btn" disabled={busy} onClick={() => setRejecting(true)}>
               Reject
             </button>
           </>
         )}
+        {/* Posting happens in the Studio, after approval; here a draft can only be copied. */}
         {!rejecting && (
           <span className="ml-auto flex gap-2">
             <Copy text={text} />
-            {count > LIMIT ? (
-              // X would refuse it. The note above says what to do.
-              <button type="button" className="btn" disabled>
-                Post now
-              </button>
-            ) : (
-              <a className="btn" href={`https://x.com/intent/post?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer">
-                Post now
-              </a>
-            )}
           </span>
         )}
         {failed && (

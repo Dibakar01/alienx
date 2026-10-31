@@ -39,12 +39,22 @@ export async function decideAction(input: unknown): Promise<{ error?: string }> 
 
 // Schedule: the draft is approved (so the voice keeps learning) and goes on the schedule at
 // the account's next free slot. The page then asks /api/art for its image.
-const Schedule = z.object({ id: z.number().int(), handle: z.string(), posts: z.array(z.string().trim().min(1)).min(1).max(8), claims: z.array(z.object({ text: z.string(), source: z.enum(["facts", "seed", "research", "unverified"]) })) });
+const Schedule = z.object({ id: z.number().int(), handle: z.string(), topic_id: z.number().int().optional(), posts: z.array(z.string().trim().min(1)).min(1).max(8), claims: z.array(z.object({ text: z.string(), source: z.enum(["facts", "seed", "research", "unverified"]) })) });
 export async function scheduleAction(input: unknown): Promise<{ post?: Post; error?: string }> {
   try {
     const d = Schedule.parse(input);
     decide(d.id, "approved", d.posts);
-    const post = createPost({ handle: d.handle, draft_id: d.id, posts: d.posts, claims: d.claims, source: "seed", scheduled_at: slotFor(d.handle) });
+    // A draft made from a discovered idea keeps its link, so the post carries the idea's sources.
+    const post = createPost({
+      handle: d.handle,
+      draft_id: d.id,
+      topic_id: d.topic_id,
+      posts: d.posts,
+      claims: d.claims,
+      source: d.topic_id ? "plan" : "seed",
+      scheduled_at: slotFor(d.handle),
+    });
+    if (d.topic_id) setTopic(d.topic_id, "drafted");
     revalidatePath("/");
     return { post };
   } catch (e) {
@@ -57,7 +67,7 @@ const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const Change = z.discriminatedUnion("do", [
   z.object({ do: z.literal("move"), id: Id, day: Day }),
   z.object({ do: z.literal("edit"), id: Id, posts: z.array(z.string().trim().min(1)).min(1).max(8) }),
-  z.object({ do: z.literal("kill"), id: Id }),
+  z.object({ do: z.literal("kill"), id: Id, undo: z.boolean().optional() }),
   z.object({ do: z.literal("restore"), id: Id }),
   z.object({ do: z.literal("posted"), id: Id }),
 ]);
@@ -79,6 +89,8 @@ export async function changePostAction(input: unknown): Promise<{ post?: Post; e
     } else if (c.do === "kill") {
       if (p.status === "posted") throw new Error("That post is already out.");
       post = updatePost(p.id, { status: "killed" });
+      // Undoing an approval in Create puts its idea back among the ideas.
+      if (c.undo && p.topic_id) setTopic(p.topic_id, "proposed");
     } else if (c.do === "restore") {
       if (p.status !== "killed") throw new Error("That post was not killed.");
       // Undo of a kill: back on the schedule, or straight to due if its slot passed meanwhile.

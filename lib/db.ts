@@ -106,6 +106,9 @@ export type Post = {
   status: PostStatus;
   scheduled_at: string;
   posted_at: string | null;
+  // Tags for the calendar, filled by listPosts from the draft and topic it came from.
+  angle?: string | null;
+  pillar?: string | null;
 };
 type PostRow = Omit<Post, "posts" | "claims" | "art"> & { posts: string; claims: string; art: string | null };
 const toPost = (r: PostRow): Post => ({ ...r, posts: JSON.parse(r.posts), claims: JSON.parse(r.claims), art: r.art ? JSON.parse(r.art) : null });
@@ -138,7 +141,9 @@ export function getPost(id: number): Post {
 export function listPosts(from: string, to: string): Post[] {
   const rows = db()
     .prepare(
-      `SELECT ${POST_COLUMNS} FROM posts WHERE status != 'killed' AND ((scheduled_at >= ? AND scheduled_at < ?) OR status = 'due') ORDER BY scheduled_at`,
+      `SELECT ${POST_COLUMNS.split(", ").map((c) => `p.${c}`).join(", ")}, d.angle AS angle, COALESCE(d.pillar, t.pillar) AS pillar
+       FROM posts p LEFT JOIN drafts d ON d.id = p.draft_id LEFT JOIN topics t ON t.id = p.topic_id
+       WHERE p.status != 'killed' AND ((p.scheduled_at >= ? AND p.scheduled_at < ?) OR p.status = 'due') ORDER BY p.scheduled_at`,
     )
     .all(from, to) as PostRow[];
   return rows.map(toPost);

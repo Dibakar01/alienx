@@ -115,7 +115,9 @@ export function PostDetail({
             </h2>
             <p className="text-sm text-muted">
               {posted ? "Posted." : post.status === "due" ? <span className="font-semibold text-brand">Due now. Post it when you are ready.</span> : `Goes out ${when(post.scheduled_at)} IST, unless you change it.`}{" "}
-              {post.source === "plan" ? "Researched by alienX." : "From your thought."}
+              {post.source === "plan" ? "From a discovered idea." : "From your own idea."}
+              {post.angle ? ` ${post.angle[0]!.toUpperCase()}${post.angle.slice(1)}` : ""}
+              {post.pillar ? ` · ${post.pillar}.` : post.angle ? "." : ""}
             </p>
           </div>
           <form method="dialog">

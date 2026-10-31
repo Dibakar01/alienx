@@ -101,7 +101,7 @@ export function Week({ accounts, posts, sources, now }: { accounts: AccountInfo[
                 <span key={`d${due}`} className="roll">{due}</span> {due === 1 ? "post needs you. " : "posts need you. "}
               </span>
             ) : null}
-            <span key={`c${coming}`} className="roll">{coming}</span> {coming === 1 ? "post" : "posts"} on the schedule. Drag a card to another day, or open it.
+            <span key={`c${coming}`} className="roll">{coming}</span> {coming === 1 ? "post" : "posts"} approved and on the calendar. Open one to post it; drag it to change the day.
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2" role="group" aria-label="Week">
@@ -179,7 +179,7 @@ export function Week({ accounts, posts, sources, now }: { accounts: AccountInfo[
       {live.length === 0 && (
         <div className="pointer-events-none absolute inset-0 grid place-items-center pb-24">
           <p className="sheet sheet-b px-6 py-4 text-center text-sm">
-            Nothing on the schedule yet. Write a thought, or draft a topic.
+            Nothing on the calendar yet. Approve a draft in Create and it lands here.
           </p>
         </div>
       )}
@@ -326,17 +326,22 @@ function Card({
       style={{ "--r": `${tilt * 0.8}deg`, "--i": index } as React.CSSProperties}
       className={`group relative grid w-full touch-none cursor-grab gap-1 rounded-[6px] max-sm:grid-cols-[6.5rem_minmax(0,1fr)] max-sm:gap-x-2.5 border bg-paper p-1.5 text-left text-ink select-none [rotate:var(--r)] hover:-translate-y-0.5 hover:[rotate:0deg] motion-reduce:[rotate:0deg] ${due ? "border-brand" : "border-line"} ${posted ? "cursor-default opacity-70" : ""}`}
     >
-      <span className="relative block aspect-video overflow-hidden rounded-[3px] bg-wash max-sm:row-span-2">
+      <span className="relative block aspect-video overflow-hidden rounded-[3px] bg-wash max-sm:row-span-3">
         {post.art ? (
           <img src={`/api/art?id=${post.id}&v=${v}`} alt="" draggable={false} className="size-full object-cover" />
         ) : (
-          <span className="grid size-full place-items-center text-xs text-muted">No image yet</span>
+          <span className="grid size-full place-items-center text-xs text-muted">No picture yet. Open to draw.</span>
         )}
       </span>
       <span className={`flex items-center gap-1.5 ${big ? "text-sm" : "text-xs"}`}>
         {due && <span aria-hidden="true" className="size-2 shrink-0 bg-brand" />}
         <span className={`font-semibold tabular-nums ${due ? "text-brand" : ""}`}>{due ? "Due now" : posted ? "Posted" : clock(post.scheduled_at)}</span>
-        {post.source === "plan" && <span className="ml-auto text-muted">researched</span>}
+      </span>
+      {/* Tags: what kind of post, what about, and where it came from. */}
+      <span className="flex flex-wrap gap-1 text-[11px] leading-tight">
+        {post.angle && <span className="rounded-[4px] bg-wash px-1 py-px font-semibold">{post.angle}</span>}
+        {post.pillar && <span className="rounded-[4px] bg-wash px-1 py-px text-muted">{post.pillar}</span>}
+        <span className="rounded-[4px] px-1 py-px text-muted">{post.source === "plan" ? "from an idea" : "your idea"}</span>
       </span>
       <span className={`font-post leading-snug ${big ? "line-clamp-5 text-sm" : "line-clamp-2 text-xs"}`}>{post.posts[0]}</span>
     </button>
