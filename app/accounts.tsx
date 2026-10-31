@@ -31,6 +31,9 @@ export type AccountInfo = {
   banned: string[];
   articles: number;
   samples: number;
+  // The account's posting rules from config/slots.json, for the Studio's calendar and stats.
+  // Windows are India-time "HH:MM" pairs; weeks run Monday to Sunday.
+  cadence: { per_week: number; per_day: number; gap_min: number; weekday: string[][]; weekend: string[][] };
 };
 
 // Which form the overlay shows, and which account past posts are for.
@@ -172,7 +175,7 @@ function AddAccount({ hidden, handles, onDone }: { hidden: boolean; handles: str
             <path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
           </svg>
           <span className="text-sm font-semibold text-muted">Drop essays, posts or a PDF here</span>
-          <span className="rounded-[6px] bg-white px-2 py-0.5 text-xs font-semibold text-muted">Coming soon</span>
+          <span className="rounded-[6px] bg-paper px-2 py-0.5 text-xs font-semibold text-muted">Coming soon</span>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">

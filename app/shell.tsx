@@ -15,7 +15,7 @@ import { Mascot } from "./mascot.tsx";
 import { Profiles } from "./profiles.tsx";
 import { ThemeIcon, useTheme } from "./theme.tsx";
 import { Landing } from "./landing.tsx";
-import { type Face, Studio } from "./studio.tsx";
+import { Studio } from "./studio.tsx";
 import { Week } from "./week.tsx";
 
 // In the order the work happens: make a post, then schedule and post it.
@@ -26,24 +26,24 @@ const PROFILE = "alienx.profile";
 // The order the profiles stand in: the brand first, then the founders.
 const ORDER = ["iamqalakaar", "dibakaarr", "anshsarkar_"];
 
-// Each step's mark on the dock: its number at the top left, then its picture, so the order
-// reads at a glance and the dock keeps its magnifying motion.
-const mark = (n: number, d: string) => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[62%]" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-    <text x="0" y="8.5" fill="currentColor" stroke="none" fontSize="9.5" fontWeight="800" fontFamily="var(--font-mono, ui-monospace)">
-      {n}
-    </text>
-    <path d={d} />
-  </svg>
+// Each step on the dock: its picture with its name under it, always visible, so the way
+// through reads at a glance and the dock keeps its magnifying motion.
+const mark = (label: string, d: string) => (
+  <span className="grid justify-items-center gap-[3px]" aria-hidden="true">
+    <svg viewBox="0 0 24 24" className="size-[22px]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d={d} />
+    </svg>
+    <span className="text-[9px] leading-none font-semibold tracking-[0.02em] whitespace-nowrap">{label}</span>
+  </span>
 );
-// The steps, in the order the work happens. Steps 1 and 2 are the two halves of Create.
+// The two steps, in the order the work happens: make a post, then post it from the calendar.
 const STEPS = [
-  // A bulb; a stamp; a calendar page.
-  { n: 1, label: "Idea", where: "idea", icon: mark(1, "M14.5 21h3M13.6 18.5h5.8M16.5 6a5 5 0 0 0-3 9c.6.5 1 1.2 1 2h4c0-.8.4-1.5 1-2a5 5 0 0 0-3-9z") },
-  { n: 2, label: "Approve", where: "drafts", icon: mark(2, "M10 21h12M11 18h10v-2.5a1.5 1.5 0 0 0-1.5-1.5h-2.2l-.6-3.2a2.4 2.4 0 1 0-1.4 0l-.6 3.2h-2.2a1.5 1.5 0 0 0-1.5 1.5z") },
-  { n: 3, label: "Studio", where: "week", icon: mark(3, "M9 9.5h13v11H9zM9 13h13M12.5 7.5v3M18.5 7.5v3M12 16h2M16 16h2M12 18.5h2") },
+  // A pencil with a spark; a calendar page.
+  { n: 1, label: "Create", view: "write", icon: mark("1 Create", "M5 19l1-4L16.5 4.5a2 2 0 0 1 3 3L9 18zM14 7l3 3M5 19h6M19 14v4M17 16h4") },
+  { n: 2, label: "Studio", view: "week", icon: mark("2 Studio", "M4 6.5h16v13H4zM4 10.5h16M8.5 4v4M15.5 4v4M8 14h2M12 14h2M16 14h0.5M8 17h2") },
 ] as const;
-type Where = (typeof STEPS)[number]["where"];
+// Where a finished job's result lands (see activity.tsx): ideas and drafts are both in Create.
+type Where = "idea" | "drafts" | "week";
 
 // A change of view or profile happens at once; the incoming page slides in with a CSS
 // animation (.page-in, .view). A View Transition was used before, but it freezes the page
@@ -64,8 +64,8 @@ export function Shell({
   now: string;
 }) {
   const [view, setView] = useState<View>("write");
-  // Which half of Create is in front: the idea or the drafts.
-  const [face, setFace] = useState<Face>("thought");
+  // An idea a Studio suggestion asked Create to draft; `at` makes each ask a new one.
+  const [start, setStart] = useState<{ topicId: number; at: number } | null>(null);
   // A first visit opens on the landing page; "Get started" moves on to choosing who is posting.
   const [choosing, setChoosing] = useState(false);
   // The landing page, opened again from the alien mark at the top left.
@@ -118,59 +118,79 @@ export function Shell({
     return () => clearInterval(t);
   }, [router]);
 
-  // alienX's pick: once a day, each account in view that has a voice and nothing coming gets
-  // one approved post booked (the server checks again and keeps to the cadence). It shows in
-  // the activity card and lands on the Studio calendar, tagged as alienX's pick.
-  const picking = useRef(false);
+  // alienX manages each account in view, once a day, on its own: an account with a voice and
+  // nothing coming gets one approved post booked (alienX's pick; the server checks again and
+  // keeps to the cadence), and an account down to fewer than two waiting ideas gets fresh ones
+  // discovered. Both show in the activity card while they run. A reload mid-run asks again
+  // and the server joins the run in progress.
+  const managing = useRef(false);
   useEffect(() => {
-    if (!profile || picking.current) return;
+    if (!profile || managing.current) return;
     const nowIso = new Date().toISOString();
     const today = nowIso.slice(0, 10);
-    const empty = accounts.filter(
-      (a) =>
-        a.ready &&
-        (profile === "all" || a.handle === profile) &&
-        !posts.some((p) => p.handle === a.handle && (p.status === "due" || (p.status === "scheduled" && p.scheduled_at >= nowIso))),
-    );
-    // Asked today already and answered: not again. A reload mid-run asks again and rejoins it.
+    const key = (h: string) => `alienx.manage.${h}`;
     const stamp = (h: string) => {
       try {
-        localStorage.setItem(`alienx.pick.${h}`, today);
+        localStorage.setItem(key(h), today);
       } catch {
-        // Nowhere to remember it; the server still never books twice.
+        // Nowhere to remember it; the server still never books or searches twice at once.
       }
     };
-    const todo = empty.filter((a) => {
+    const todo = accounts.filter((a) => {
+      if (!a.ready || (profile !== "all" && a.handle !== profile)) return false;
       try {
-        return localStorage.getItem(`alienx.pick.${a.handle}`) !== today;
+        return localStorage.getItem(key(a.handle)) !== today;
       } catch {
         return false; // Nowhere to remember it, so never ask on every refresh.
       }
     });
     if (!todo.length) return;
-    picking.current = true;
+    managing.current = true;
+    const ask = (body: object) =>
+      fetch("/api/plan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
+        .then((x) => x.json())
+        .catch((e: unknown) => ({ error: String(e), left: true })) as Promise<{ post?: Post | null; topics?: unknown[]; error?: string; left?: boolean }>;
     void (async () => {
       for (const { handle } of todo) {
-        // With ideas waiting it only drafts and draws; with none it discovers some first.
-        const waiting = topics.some((t) => t.handle === handle);
-        const done = startJob({ handle, label: `Choosing today's pick for @${handle}`, kind: "discover", where: "week", typical: waiting ? 120 : 360 });
-        const r = (await fetch("/api/plan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pick: handle }) })
-          .then((x) => x.json())
-          .catch((e: unknown) => ({ error: String(e), left: true }))) as { post?: Post | null; error?: string; left?: boolean };
-        // A request cut off by leaving the page is not an answer; the next visit rejoins the run.
-        if (!r.left) stamp(handle);
-        done(r.error ? { ok: false, text: `No pick for @${handle} today. Draft one in Create.` } : r.post ? { ok: true, text: `Today's pick for @${handle} is on the Studio calendar.` } : undefined);
+        let waiting = topics.filter((t) => t.handle === handle).length;
+        const coming = posts.some((p) => p.handle === handle && (p.status === "due" || (p.status === "scheduled" && p.scheduled_at >= nowIso)));
+        let left = false;
+        if (!coming) {
+          // With ideas waiting it only drafts and draws; with none it discovers some first.
+          const done = startJob({ handle, label: `Choosing today's pick for @${handle}`, kind: "discover", where: "week", typical: waiting ? 120 : 360 });
+          const r = await ask({ pick: handle });
+          left ||= Boolean(r.left);
+          if (r.post) waiting = Math.max(0, waiting - 1);
+          done(r.error ? { ok: false, text: `No pick for @${handle} today. Draft one in Create.` } : r.post ? { ok: true, text: `Today's pick for @${handle} is on the Studio calendar.` } : undefined);
+        }
+        if (waiting < 2 && !left) {
+          const done = startJob({ handle, label: `Finding fresh ideas for @${handle}`, kind: "discover", where: "idea", typical: 240 });
+          const r = await ask({ research: handle });
+          left ||= Boolean(r.left);
+          done(r.error ? { ok: false, text: `No fresh ideas for @${handle} this time.` } : { ok: true, text: `${r.topics?.length ?? "New"} fresh ideas for @${handle} are waiting in Create.` });
+        }
+        // A request cut off by leaving the page is not an answer; the next visit asks again.
+        if (!left) stamp(handle);
       }
-      picking.current = false;
+      managing.current = false;
       router.refresh();
     })();
   }, [profile, posts, accounts, topics, router]);
 
   // A step on the rail, or where a finished job's result landed.
-  const goTo = (w: Where) => {
-    if (w !== "week") setFace(w === "drafts" ? "post" : "thought");
-    go(w === "week" ? "week" : "write");
-  };
+  const goTo = (w: Where) => go(w === "week" ? "week" : "write");
+
+  // 1 and 2 on the keyboard switch steps, when nothing is being typed.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (!profile || e.metaKey || e.ctrlKey || e.altKey || t?.closest("input, textarea, select, [contenteditable], dialog[open]")) return;
+      if (e.key === "1") go("write");
+      if (e.key === "2") go("week");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   const go = (v: View) => {
     if (v === view) return;
@@ -222,7 +242,7 @@ export function Shell({
         <h1 className="sr-only">alienX</h1>
         {choosing ? (
           <div className="page-in h-full">
-          <Profiles accounts={ordered} posts={posts} onPick={pick} onAbout={() => turn(() => setAbout(true))} />
+          <Profiles accounts={ordered} posts={posts} topics={topics} now={now} onPick={pick} onAbout={() => turn(() => setAbout(true))} />
           </div>
         ) : (
           <Landing
@@ -248,18 +268,31 @@ export function Shell({
   const myTopics = topics.filter((t) => own(t.handle));
   const me = mine.length === 1 ? mine[0]! : null;
   const due = myPosts.filter((p) => p.status === "due").length;
-  const badges: Record<Where, number> = { idea: myTopics.length, drafts: 0, week: due };
-  const at: Where = view === "week" ? "week" : face === "post" ? "drafts" : "idea";
+  const badges: Record<View, number> = { write: myTopics.length, week: due };
 
   return (
     <div className="relative h-dvh overflow-hidden">
       <h1 className="sr-only">alienX{me ? `, ${me.name}` : ", all accounts"}</h1>
       {/* Keyed by profile, so switching starts each view fresh for that account. */}
       <div hidden={view !== "week"} className="view h-full">
-        <Week key={profile} accounts={mine} posts={myPosts} sources={sources} now={now} onAbout={() => turn(() => setAbout(true))} onStart={() => goTo("idea")} />
+        <Week
+          key={profile}
+          accounts={mine}
+          posts={myPosts}
+          topics={myTopics}
+          sources={sources}
+          now={now}
+          onAbout={() => turn(() => setAbout(true))}
+          onCreate={() => go("write")}
+          onDraft={(topicId) => {
+            // A suggestion to draft a waiting idea: Create opens and drafts it straight away.
+            setStart({ topicId, at: Date.now() });
+            go("write");
+          }}
+        />
       </div>
       <div hidden={view !== "write"} className="view h-full">
-        <Studio key={profile} accounts={mine} topics={myTopics} face={face} setFace={setFace} onOpenStudio={() => go("week")} onAbout={() => turn(() => setAbout(true))} />
+        <Studio key={profile} accounts={mine} topics={myTopics} posts={myPosts} now={now} start={start} onOpenStudio={() => go("week")} onAbout={() => turn(() => setAbout(true))} />
       </div>
       <nav aria-label="Steps">
         <Dock
@@ -269,10 +302,10 @@ export function Shell({
           items={[
             ...STEPS.map((s) => ({
               icon: s.icon,
-              label: `${s.n} ${s.label}`,
-              active: at === s.where,
-              badge: badges[s.where] ? String(badges[s.where]) : undefined,
-              onClick: () => goTo(s.where),
+              label: `${s.n} ${s.label}${s.view === "write" ? " (key 1)" : " (key 2)"}`,
+              active: view === s.view,
+              badge: badges[s.view] ? String(badges[s.view]) : undefined,
+              onClick: () => go(s.view),
             })),
             { separator: true },
             {

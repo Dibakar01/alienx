@@ -6,17 +6,57 @@
 // Profiles are a view, not a permission: the one login covers everyone. With no accounts
 // yet (a fresh clone), it welcomes you and adds the first one.
 import { useEffect, useRef, useState } from "react";
-import type { Post } from "../lib/db.ts";
+import type { Post, Topic } from "../lib/db.ts";
+import { type Suggestion, suggest } from "../lib/suggest.ts";
+import { local, ZONE } from "../lib/time.ts";
 import { type AccountInfo, Accounts, type Upkeep } from "./accounts.tsx";
 import { Avatar } from "./avatar.tsx";
+import { readDismissed } from "./dismissed.ts";
 import { Mascot } from "./mascot.tsx";
 
 type Slot = { kind: "add" } | { kind: "account"; account: AccountInfo } | { kind: "all" };
 
 const reduced = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const mod = (a: number, n: number) => ((a % n) + n) % n;
+const needsYou = (s: Suggestion) => s.kind === "due" || s.kind === "review";
+const things = (n: number) => `${n} ${n === 1 ? "thing needs" : "things need"} you`;
 
-export function Profiles({ accounts, posts, onPick, onAbout }: { accounts: AccountInfo[]; posts: Post[]; onPick: (handle: string) => void; onAbout?: () => void }) {
+// alienX's top suggestion for the centre card: its own sentence from lib/suggest.ts, with the
+// handle taken out (the card already names the account), so it reads the same as elsewhere.
+function line(top: Suggestion | undefined, tips: Suggestion[]) {
+  if (!top) return "All set for this week.";
+  if (top.kind === "due") {
+    const n = tips.filter((t) => t.kind === "due").length;
+    return `${n} ${n === 1 ? "post" : "posts"} due now.`;
+  }
+  const h = `@${top.handle}`;
+  const text = top.text.replace(`${h}'s `, "the ").replace(`${h} has`, "Has").replace(` for ${h}`, "");
+  // "alienX" keeps its small a; any other sentence starts with a capital.
+  return text.startsWith("alienX") ? text : text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+export function Profiles({
+  accounts,
+  posts,
+  topics,
+  now,
+  onPick,
+  onAbout,
+}: {
+  accounts: AccountInfo[];
+  posts: Post[];
+  topics: Topic[];
+  now: string;
+  onPick: (handle: string) => void;
+  onAbout?: () => void;
+}) {
+  // "Not today" from any screen hides a suggestion here too, except a due post: that stays.
+  const today = local(new Date(now), ZONE).day;
+  const [hidden, setHidden] = useState<string[]>([]);
+  useEffect(() => setHidden(readDismissed(today)), [today]);
+  const tips = suggest(accounts, posts, topics, new Date(now)).filter((t) => t.kind === "due" || !hidden.includes(t.id));
+  const tipsFor = (handle: string) => tips.filter((t) => t.handle === handle);
+  const waiting = (handle?: string) => tips.filter((t) => needsYou(t) && (!handle || t.handle === handle)).length;
   const dialog = useRef<HTMLDialogElement>(null);
   const [upkeep, setUpkeep] = useState<Upkeep>({ mode: "add", who: accounts[0]?.handle ?? "" });
   const add = () => {
@@ -145,7 +185,9 @@ export function Profiles({ accounts, posts, onPick, onAbout }: { accounts: Accou
             </svg>
             {slots.map((s, i) => {
               const on = i === chosen;
-              const label = s.kind === "add" ? "Add an account" : s.kind === "all" ? "All accounts" : s.account.name;
+              const name = s.kind === "add" ? "Add an account" : s.kind === "all" ? "All accounts" : s.account.name;
+              const need = s.kind === "account" ? waiting(s.account.handle) : 0;
+              const label = need ? `${name}, ${things(need)}` : name;
               return (
                 <div key={i} className="absolute top-1/2 left-1/2 size-0" style={{ transform: `rotate(${i * step}deg) translateY(calc(var(--dial) * -0.355))` }}>
                   <button
@@ -158,9 +200,12 @@ export function Profiles({ accounts, posts, onPick, onAbout }: { accounts: Accou
                     onClick={() => (on ? enter(s) : turnTo(i))}
                     style={{ transform: `translate(-50%, -50%) rotate(${-(i * step) - rot}deg)`, transition: ease }}
                     className={`absolute grid size-[calc(var(--dial)*0.2)] place-items-center rounded-full bg-wash shadow-[inset_0_3px_7px_rgb(0_0_0/0.28),inset_0_-1px_0_rgb(255_255_255/0.7)] transition-[box-shadow,filter] duration-200 ${
-                      on ? "ring-[3px] ring-brand ring-offset-[3px] ring-offset-paper" : "grayscale-[0.65] hover:grayscale-0"
+                      on ? "ring-[3px] ring-brand ring-offset-[3px] ring-offset-paper" : "*:grayscale-[0.65] *:transition-[filter] hover:*:grayscale-0"
                     }`}
                   >
+                    {need > 0 && (
+                      <span aria-hidden="true" className="absolute top-[6%] right-[6%] z-10 size-[max(10px,calc(var(--dial)*0.032))] rounded-full bg-brand ring-2 ring-paper grayscale-0!" />
+                    )}
                     {s.kind === "add" ? (
                       <span className="grid size-[78%] place-items-center rounded-full border-2 border-dashed border-strong text-[calc(var(--dial)*0.06)] leading-none text-muted">+</span>
                     ) : s.kind === "all" ? (
@@ -181,12 +226,16 @@ export function Profiles({ accounts, posts, onPick, onAbout }: { accounts: Accou
           {/* The number card in the middle stays still: who is chosen, and the way in. */}
           <div className="absolute inset-[28%] grid place-items-center rounded-full bg-paper text-center text-ink shadow-[0_0_0_1px_var(--rule-strong),var(--lift)]">
             <span aria-hidden="true" className="absolute inset-[5%] rounded-full border border-dashed border-line" />
-            <div className="relative grid justify-items-center gap-1 px-5" key={chosen}>
-              <p className="roll text-[11px] font-semibold tracking-[0.14em] text-muted uppercase">{slot.kind === "add" ? "New voice" : "Posting as"}</p>
+            <div className="relative grid justify-items-center gap-1 px-5 max-sm:gap-0.5 max-sm:px-3" key={chosen}>
+              <p className="roll text-[11px] max-sm:hidden! font-semibold tracking-[0.14em] text-muted uppercase">{slot.kind === "add" ? "New voice" : "Posting as"}</p>
               <p className="roll text-xl leading-tight font-bold tracking-[-0.02em] sm:text-2xl">{slot.kind === "add" ? "Add an account" : slot.kind === "all" ? "All accounts" : slot.account.name}</p>
-              <p className="roll text-sm text-muted">{slot.kind === "add" ? "Teach alienX a new voice" : slot.kind === "all" ? stats() : `@${slot.account.handle}`}</p>
-              {slot.kind === "account" && <p className="roll text-xs text-muted max-sm:hidden!">{stats(slot.account.handle)}</p>}
-              <button type="button" className="btn btn-primary mt-2 px-6" onClick={() => enter()}>
+              <p className="roll text-sm text-muted">{slot.kind === "add" ? "Teach alienX a new voice" : slot.kind === "all" ? (waiting() ? things(waiting()) : stats()) : `@${slot.account.handle}`}</p>
+              {slot.kind === "account" && (
+                <p className={`roll line-clamp-2 max-w-[12rem] text-xs leading-snug max-sm:text-[11px] max-sm:leading-tight ${waiting(slot.account.handle) ? "font-semibold text-brand" : "text-muted"}`}>
+                  {line(tipsFor(slot.account.handle)[0], tipsFor(slot.account.handle))}
+                </p>
+              )}
+              <button type="button" className="btn btn-primary mt-2 px-6 max-sm:mt-1" onClick={() => enter()}>
                 {slot.kind === "add" ? "Add" : "Enter"}
               </button>
             </div>

@@ -95,6 +95,18 @@ export async function research(handle: string, now = new Date()): Promise<Topic[
 export async function draftTopic(topicId: number, onlyIfFree = false): Promise<Post | null> {
   const topic = getTopic(topicId);
   if (topic.status !== "proposed") throw new Error(`That topic is already ${topic.status}.`);
+  // Taken off the waiting ideas at once, so nobody drafts it again from Create meanwhile;
+  // it goes back if drafting fails.
+  setTopic(topic.id, "drafted");
+  try {
+    return await draftTaken(topic, onlyIfFree);
+  } catch (e) {
+    setTopic(topic.id, "proposed");
+    throw e;
+  }
+}
+
+async function draftTaken(topic: Topic, onlyIfFree: boolean): Promise<Post | null> {
   const drafts = await generate({
     handle: topic.handle,
     seed: `${topic.title}\n\n${topic.why}`,
@@ -103,7 +115,10 @@ export async function draftTopic(topicId: number, onlyIfFree = false): Promise<P
     research: topic.findings,
   });
   const pick = drafts.find((d) => d.angle === topic.angle) ?? drafts[0]!;
-  if (onlyIfFree && takenSlots(topic.handle, new Date().toISOString()).length) return null;
+  if (onlyIfFree && takenSlots(topic.handle, new Date().toISOString()).length) {
+    setTopic(topic.id, "proposed"); // nothing booked: the idea waits for another day
+    return null;
+  }
   const post = createPost({
     handle: topic.handle,
     draft_id: pick.id,
@@ -127,10 +142,14 @@ export async function draftTopic(topicId: number, onlyIfFree = false): Promise<P
 // When nothing is coming, the best waiting idea (discovering some first if none wait) is
 // drafted, illustrated and booked into the next slot the cadence allows (config/slots.json:
 // per day, per week and the gap). It never posts; the Studio still waits for a tap.
-export async function pickFor(handle: string, now = new Date()): Promise<Post | null> {
+// An account has a voice once it has a profile of its own or inherits one.
+const voiced = (handle: string) => {
   const account = readAccount(handle);
-  const voiced = account.profile ?? (account.inherits ? readAccount(account.inherits).profile : undefined);
-  if (!voiced || takenSlots(handle, now.toISOString()).length) return null;
+  return Boolean(account.profile ?? (account.inherits ? readAccount(account.inherits).profile : undefined));
+};
+
+export async function pickFor(handle: string, now = new Date()): Promise<Post | null> {
+  if (!voiced(handle) || takenSlots(handle, now.toISOString()).length) return null;
   let ideas = listTopics("proposed").filter((t) => t.handle === handle);
   if (!ideas.length) ideas = await research(handle, now);
   // A mix: not the same angle as the last idea it drafted, when another is waiting.
@@ -139,13 +158,16 @@ export async function pickFor(handle: string, now = new Date()): Promise<Post | 
   return best ? draftTopic(best.id, true) : null;
 }
 
-// The daily run: one pick per account that needs one, one after another.
+// The daily run: one pick per account that needs one, and fresh ideas for any account
+// running low, one account after another.
 export async function daily(only?: string): Promise<number> {
   let failed = 0;
   for (const { handle } of only ? [{ handle: only }] : listAccounts()) {
     try {
       const post = await pickFor(handle);
       console.log(post ? `@${handle}: picked #${post.id} for ${post.scheduled_at}` : `@${handle}: already has a post ahead`);
+      // Fewer than two ideas left: discover fresh ones now, so tomorrow's pick has a choice.
+      if (voiced(handle) && listTopics("proposed").filter((t) => t.handle === handle).length < 2) console.log(`@${handle}: ${(await research(handle)).length} fresh ideas`);
     } catch (e) {
       failed++;
       console.error(`@${handle}: no pick today (${e instanceof Error ? e.message : e})`);

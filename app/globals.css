@@ -413,14 +413,16 @@
 
 /* Turning the page: the view or screen that appears slides in from the right on the spring.
    A plain animation, so clicks always land, even mid-animation. */
+/* A view switch reads as instant: the new page is already mostly there and settles in a
+   quarter second, so moving around never feels like waiting. */
 .view:not([hidden]) > *,
 .page-in {
-  animation: page-in var(--dur-spring) var(--spring) both;
+  animation: page-in 0.26s var(--spring) both;
 }
 @keyframes page-in {
   from {
-    opacity: 0;
-    translate: 20px 0;
+    opacity: 0.35;
+    translate: 10px 0;
   }
 }
 

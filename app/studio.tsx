@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import type { Draft, Topic } from "../lib/db.ts";
+import type { Draft, Post, Topic } from "../lib/db.ts";
 import { LIMIT, problems, weighted } from "../lib/post.ts";
 import { type AccountInfo, Accounts, type Upkeep } from "./accounts.tsx";
 import { changePostAction, decideAction, scheduleAction } from "./actions.ts";
-import { when } from "../lib/time.ts";
+import { local, when, ZONE } from "../lib/time.ts";
+import { suggest } from "../lib/suggest.ts";
+import { fills, recommend } from "./create-pick.ts";
 import { startJob } from "./activity.tsx";
 import { Ideas } from "./ideas.tsx";
+import { dismiss as dismissFor, readDismissed } from "./dismissed.ts";
 import { Working } from "./working.tsx";
 import { Mascot } from "./mascot.tsx";
 import { ViewTitle } from "./title.tsx";
@@ -18,7 +21,12 @@ type Format = "single" | "thread";
 type Status = Draft["status"];
 // `asked` records the inputs a set was made from, so the page knows when Generate would repeat them.
 // `topicId` links drafts made from a discovered idea, so approving one keeps its sources.
-type DraftSet = { drafts: Draft[]; allow: Allow; asked: string; topicId?: number };
+// `rec` is the draft alienX recommends, with the reason built from its signals.
+type DraftSet = { drafts: Draft[]; allow: Allow; asked: string; topicId?: number; rec?: { id: number; angle: string; reason: string } };
+// What alienX would do next, offered once a draft is approved: one press, or Not now.
+type Next = { text: string; label: string; go: () => void; dismiss: () => void };
+// What a set of drafts was made from: an idea (with its id) or your own words.
+type Origin = { title: string; idea?: Topic };
 
 const ANGLES: Record<string, string> = {
   story: "a small scene",
@@ -28,60 +36,74 @@ const ANGLES: Record<string, string> = {
   question: "a real question",
 };
 const STORE = "alienx.accounts";
+// Suggestions set aside with Not now, remembered for the day.
 
-// One object on a quiet ground. The thought is on one face and the post on the other: side
-// by side on a laptop, one at a time on a phone. The page itself never scrolls; the two
-// text boxes take whatever height is left.
-// Create: where a post gets made. Start from a discovered idea or your own, get five drafts
-// in your voice, approve one. Approving prepares its picture, sources and slot and puts it
-// on the Studio calendar.
-export type Face = "thought" | "post";
-
+// Create: where a post gets made, as one surface that moves on by itself. alienX's recommendation leads,
+// your own words sit under it, the other ideas follow. One press on an idea (or on Write for
+// your own words) starts five drafts in the account's voice; the drafts open beside the ideas
+// on a laptop and in their place on a phone, on the angle the idea asked for. Approving one
+// prepares its picture, sources and slot and puts it on the Studio calendar. The page itself
+// never scrolls; the lists and the draft scroll inside themselves.
+// `start` asks for an idea to be drafted (from a Studio suggestion); each new `at` is a new ask.
+// `posts` and `now` let alienX ground its suggestions in the calendar; without them it stays quiet.
 export function Studio({
   accounts,
   topics = [],
-  face,
-  setFace,
+  start,
+  posts,
+  now,
   onOpenStudio,
   onAbout,
 }: {
   accounts: AccountInfo[];
   topics?: Topic[];
-  // Which half is in front: the idea (step 1) or the drafts (step 2). The step rail sets it too.
-  face: Face;
-  setFace: (f: Face) => void;
+  start?: { topicId: number; at: number } | null;
+  posts?: Post[];
+  now?: string;
   onOpenStudio?: () => void;
   onAbout?: () => void;
 }) {
   const ready = accounts.filter((a) => a.ready);
   const [chosen, setChosen] = useState<string[]>(ready.slice(0, 1).map((a) => a.handle));
   const [seed, setSeed] = useState("");
-  // Where the thought comes from: discovered ideas, or your own words.
-  const [startFrom, setStartFrom] = useState<"ideas" | "own">(topics.length ? "ideas" : "own");
-  // The discovered idea the thought came from, if any: its findings go with the drafts.
-  const [idea, setIdea] = useState<Topic | null>(null);
   const [format, setFormat] = useState<Format>("single");
   // The pillar picked for each account. None means any of that account's own pillars.
   const [pillarOf, setPillarOf] = useState<Record<string, string>>({});
   // X posts carry no hashtags (alienX's X rules), so the request always says so.
   const hashtags = false;
-  // Drafts, errors and running generations are kept per account.
+  // Drafts, errors, running generations and what each was made from are kept per account.
   const [sets, setSets] = useState<Record<string, DraftSet>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
+  const [origin, setOrigin] = useState<Record<string, Origin>>({});
   // When each account's drafting started, for the loading state's clock.
   const [busyAt, setBusyAt] = useState<Record<string, number>>({});
   // What has been decided on this page, so the picked draft and the tabs can show it.
   const [decided, setDecided] = useState<Record<number, Status>>({});
-  // Which account's drafts and which angle the post face shows. The angle is shared, so
-  // switching account compares the same angle across voices.
+  // Ideas finished with on this page ("Make another"), so the recommendation moves on to the next one.
+  const [tried, setTried] = useState<number[]>([]);
+  // What is in front: the ideas alone, or the drafts (beside the ideas on a laptop, in their
+  // place on a phone). Starting a draft brings the drafts forward by itself.
+  const [pane, setPane] = useState<"ideas" | "drafts">("ideas");
+  // Which account's drafts and which angle show. The angle is shared, so switching account
+  // compares the same angle across voices.
   const [shown, setShown] = useState("");
   const [angle, setAngle] = useState("story");
-  // Set when Generate is pressed before the page is ready for it: the hint speaks up.
+  // Set when Write is pressed before the page is ready for it: the hint speaks up.
   const [nudge, setNudge] = useState(false);
   const [upkeep, setUpkeep] = useState<Upkeep>({ mode: "posts", who: accounts[0]?.handle ?? "" });
+  // Bumped to move focus: to the drafts when they open, back to the pick for the next one.
+  const [focus, setFocus] = useState<{ to: "drafts" | "pick"; n: number }>({ to: "drafts", n: 0 });
   const thought = useRef<HTMLTextAreaElement>(null);
   const dialog = useRef<HTMLDialogElement>(null);
+  const draftsTitle = useRef<HTMLHeadingElement>(null);
+  // The account whose drafts show, for drafts that land later; and the last ask already handled
+  // (an ask that was already there when the page opened is not a new one).
+  const viewRef = useRef("");
+  const seen = useRef(start?.at);
+  const [dismissed, setDismissed] = useState<string[]>([]);
+  useEffect(() => setDismissed(readDismissed(local(now ? new Date(now) : new Date(), ZONE).day)), [now]);
+  const today = local(now ? new Date(now) : new Date(), ZONE).day;
 
   // Come back to the accounts used last time.
   useEffect(() => {
@@ -95,31 +117,44 @@ export function Studio({
     // Only on first load: a refreshed account list is not a reason to switch back.
   }, []);
 
+  useEffect(() => {
+    if (!focus.n) return;
+    if (focus.to === "drafts") draftsTitle.current?.focus();
+    else document.getElementById("alienx-pick")?.focus();
+  }, [focus]);
+
   // Chosen accounts in the order they are listed, voiceless ones left out.
   const picking = ready.filter((a) => chosen.includes(a.handle)).map((a) => a.handle);
   const askFor = (h: string) => JSON.stringify([seed.trim(), format, pillarOf[h] ?? "", hashtags]);
   const working = Object.values(busy).some(Boolean);
+  const pickingBusy = picking.some((h) => busy[h]);
   const repeat = picking.length > 0 && picking.every((h) => sets[h]?.asked === askFor(h) && !errors[h]);
-  // Accounts with something to show on the post face, in list order.
+  // Accounts with something to show in the drafts, in list order.
   const authors = accounts.map((a) => a.handle).filter((h) => sets[h] || busy[h] || errors[h]);
   const view = authors.includes(shown) ? shown : (authors[0] ?? "");
   const viewSet = view && !busy[view] && !errors[view] ? sets[view] : undefined;
+  useEffect(() => {
+    viewRef.current = view;
+  });
   const statusOf = (d: Draft) => decided[d.id] ?? d.status;
   const picked = (h: string) => Boolean(sets[h]?.drafts.some((d) => statusOf(d) === "approved"));
-  // The step in front, numbered as on the step rail: 1 the idea, 2 choose and approve.
-  const current = face === "post" ? 2 : 1;
   const solo = accounts.length === 1;
-  const hint = working
-    ? "About half a minute."
+  const open = pane === "drafts" && authors.length > 0;
+  // Drafts waiting for a decision are open: red belongs to Approve, not to the ideas.
+  const deciding = open && Boolean(viewSet) && !picked(view);
+  const hint = pickingBusy
+    ? "Drafting. About half a minute."
     : solo && !ready.length
       ? "No voice yet. Teach it with past posts first."
       : !picking.length
-      ? "Choose who is posting first."
-      : !seed.trim()
-        ? "Type a thought first."
-        : repeat
-          ? `Same thought. This makes ${picking.length * 5} new drafts.`
-          : "Cmd or Ctrl + Enter works too.";
+        ? "Choose who is posting first."
+        : !seed.trim()
+          ? nudge
+            ? "Type a thought first."
+            : "A thought, something you noticed, a link. Cmd or Ctrl + Enter writes."
+          : repeat
+            ? `Same thought. This makes ${picking.length * 5} new drafts.`
+            : "Cmd or Ctrl + Enter works too.";
 
   const choose = (next: string[]) => {
     setChosen(next);
@@ -145,7 +180,7 @@ export function Studio({
   // One request per account, all at once. Each account's tab fills in as its drafts land.
   const run = (handles = picking, from?: { seed: string; idea: Topic }) => {
     const text = from?.seed ?? seed;
-    const source = from ? from.idea : idea;
+    const source = from?.idea;
     if (!handles.length) return setNudge(true);
     if (!text.trim()) {
       thought.current?.focus();
@@ -153,7 +188,11 @@ export function Studio({
     }
     setNudge(false);
     setShown(handles[0]!);
-    setFace("post");
+    // The drafts open on the angle the idea asked for; your own words open on a small scene.
+    setAngle(source && source.angle in ANGLES ? source.angle : "story");
+    setPane("drafts");
+    setFocus((f) => ({ to: "drafts", n: f.n + 1 }));
+    setOrigin((o) => ({ ...o, ...Object.fromEntries(handles.map((h) => [h, source ? { title: source.title, idea: source } : { title: text.trim().split("\n")[0]! }])) }));
     setBusy((b) => ({ ...b, ...Object.fromEntries(handles.map((h) => [h, true])) }));
     setBusyAt((b) => ({ ...b, ...Object.fromEntries(handles.map((h) => [h, Date.now()])) }));
     setErrors((e) => ({ ...e, ...Object.fromEntries(handles.map((h) => [h, ""])) }));
@@ -177,280 +216,320 @@ export function Studio({
         .then((result) => {
           done("error" in result ? { ok: false, text: `Drafting for @${h} stopped. Try again.` } : { ok: true, text: `Five drafts ready for @${h}. Pick one to approve.` });
           if ("error" in result) setErrors((e) => ({ ...e, [h]: result.error }));
-          else setSets((s) => ({ ...s, [h]: { drafts: result.drafts, allow, asked, topicId: fromIdea?.id } }));
+          else {
+            // alienX's recommended draft opens first, if these are the drafts in front.
+            const rec = recommend(result.drafts, allow, fromIdea?.angle);
+            setSets((s) => ({ ...s, [h]: { drafts: result.drafts, allow, asked, topicId: fromIdea?.id, rec } }));
+            if (rec && viewRef.current === h) setAngle(rec.angle);
+          }
           setBusy((b) => ({ ...b, [h]: false }));
         });
     }
   };
 
-  // An idea becomes the thought and is drafted at once, for the account it belongs to.
-  const draftIdea = (t: Topic) => {
-    const text = `${t.title}\n\n${t.why}`;
-    setIdea(t);
-    setSeed(text);
-    setStartFrom("own");
-    setPillarOf((x) => ({ ...x, [t.handle]: t.pillar ?? "" }));
-    if (!solo) choose([t.handle]);
-    run([t.handle], { seed: text, idea: t });
+  // An idea is drafted at once, for the account it belongs to, with its findings as research.
+  const draftIdea = (t: Topic) => run([t.handle], { seed: `${t.title}\n\n${t.why}`, idea: t });
+
+  // An idea asked for from elsewhere is drafted as if it were tapped here; one already drafting
+  // just comes forward, and one no longer waiting is let go.
+  useEffect(() => {
+    if (!start || start.at === seen.current) return;
+    seen.current = start.at;
+    const t = topics.find((x) => x.id === start.topicId);
+    if (!t) return;
+    if (busy[t.handle]) {
+      setShown(t.handle);
+      setPane("drafts");
+    } else draftIdea(t);
+    // Only a new ask matters; the rest is read fresh when it comes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [start]);
+
+  // What alienX would do next, from the calendar and the waiting ideas: the open days it would fill.
+  const hints = posts ? suggest(accounts, posts, topics, now ? new Date(now) : new Date()) : [];
+  const fillOf = fills(hints);
+  const dismiss = (id: string) => setDismissed(dismissFor(today, id));
+  let next: Next | undefined;
+  for (const s of hints) {
+    if (s.action.type !== "draft" || dismissed.includes(s.id)) continue;
+    const id = s.action.topicId;
+    const t = topics.find((x) => x.id === id);
+    if (!t || t.id === origin[view]?.idea?.id || tried.includes(t.id)) continue;
+    next = { text: s.text, label: s.label, go: () => draftIdea(t), dismiss: () => dismiss(s.id) };
+    break;
+  }
+
+  // Back to the ideas, with the next pick in focus.
+  const another = () => {
+    const done = origin[view]?.idea?.id;
+    if (done) setTried((t) => (t.includes(done) ? t : [...t, done]));
+    setPane("ideas");
+    setFocus((f) => ({ to: "pick", n: f.n + 1 }));
   };
 
-  const label = working ? "Working on it." : repeat ? "Generate again" : picking.length ? `Generate ${picking.length * 5} drafts` : "Generate drafts";
+  // Try again repeats what the drafts were made from: the idea, or your own words.
+  const retry = (h: string) => {
+    const t = origin[h]?.idea;
+    if (t) draftIdea(t);
+    else run([h]);
+  };
+
+  const label = pickingBusy ? "Drafting…" : repeat ? "Write again" : picking.length > 1 ? `Write ${picking.length * 5} drafts` : "Write five drafts";
+  // Red follows what you are working on: Approve while drafts wait, Write once your own words
+  // are typed, otherwise the recommended idea. Never two at once.
+  const own = Boolean(seed.trim()) && picking.length > 0 && !deciding && !repeat;
+
+  // Your own words, in the same surface as the ideas: one box, its options, one button.
+  const composer = (
+    <form
+      aria-labelledby="own-words"
+      className="grid gap-3 rounded-card border border-line bg-wash p-3.5 sm:p-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run();
+      }}
+    >
+      <div className="flex items-baseline justify-between gap-3">
+        <label id="own-words" htmlFor="thought" className="text-[15px] font-semibold">
+          {topics.length ? "Or write your own" : "Write your own"}
+        </label>
+        {solo ? (
+          <button type="button" className="link text-xs text-muted" onClick={() => openUpkeep("posts", accounts[0]!.handle)}>
+            Teach the voice
+          </button>
+        ) : (
+          <button type="button" className="link text-xs text-muted" onClick={() => openUpkeep("posts", picking[0] ?? upkeep.who)}>
+            Accounts
+          </button>
+        )}
+      </div>
+      {!solo && (
+        <div role="group" aria-label="Who is posting" className="flex flex-wrap gap-2">
+          {accounts.map((a) => {
+            const on = picking.includes(a.handle);
+            // A chosen account carries its own pillar picker, joined to its switch.
+            const picker = on && a.pillars.length > 0;
+            return (
+              <span key={a.handle} className="inline-flex">
+                <button
+                  type="button"
+                  aria-pressed={a.ready ? on : undefined}
+                  title={a.ready ? (a.type === "brand" ? `${a.name}, brand` : a.name) : "No voice yet. Add past posts."}
+                  onClick={() => toggle(a)}
+                  className={`pill inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-card border px-2.5 font-mono text-sm ${picker ? "rounded-r-none" : ""} ${on ? "border-ink bg-ink text-paper hover:bg-ink-soft" : a.ready ? "border-strong bg-paper hover:border-ink active:bg-wash" : "border-dashed border-strong bg-paper text-muted hover:border-ink"}`}
+                >
+                  @{a.handle}
+                  {!a.ready && <span className="font-sans text-xs">no voice yet</span>}
+                </button>
+                {picker && (
+                  <select
+                    aria-label={`Pillar for @${a.handle}`}
+                    value={pillarOf[a.handle] ?? ""}
+                    onChange={(e) => setPillarOf((p) => ({ ...p, [a.handle]: e.target.value }))}
+                    className="field tight pill min-h-9 w-auto rounded-l-none border-l-0 border-ink text-xs font-medium"
+                  >
+                    <option value="">Any</option>
+                    {a.pillars.map((p) => (
+                      <option key={p}>{p}</option>
+                    ))}
+                  </select>
+                )}
+              </span>
+            );
+          })}
+        </div>
+      )}
+      <textarea
+        ref={thought}
+        id="thought"
+        rows={2}
+        value={seed}
+        onChange={(e) => {
+          setSeed(e.target.value);
+          setNudge(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            run();
+          }
+        }}
+        placeholder="What's on your mind?"
+        maxLength={4000}
+        className="field min-h-[4.5rem] resize-none"
+      />
+      {/* One profile: what it is about, as chips. Any lets the drafts pick the pillar that fits. */}
+      {solo && accounts[0]!.pillars.length > 0 && (
+        <span className="flex flex-wrap gap-1.5" role="group" aria-label="About">
+          {["", ...accounts[0]!.pillars].map((p) => {
+            const on = (pillarOf[accounts[0]!.handle] ?? "") === p;
+            return (
+              <button
+                key={p || "any"}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setPillarOf((x) => ({ ...x, [accounts[0]!.handle]: p }))}
+                className={`pill min-h-8 rounded-[6px] border px-2.5 text-sm ${on ? "border-ink bg-ink text-paper" : "border-line bg-paper text-muted hover:border-strong hover:text-ink"}`}
+              >
+                {p || "Any topic"}
+              </button>
+            );
+          })}
+        </span>
+      )}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="segmented" style={{ "--at": format === "single" ? 0 : 1 } as React.CSSProperties} role="group" aria-label="Format">
+          <span aria-hidden="true" />
+          <button type="button" aria-pressed={format === "single"} onClick={() => setFormat("single")}>
+            Single
+          </button>
+          <button type="button" aria-pressed={format === "thread"} onClick={() => setFormat("thread")}>
+            Thread
+          </button>
+        </span>
+        <button type="submit" className={`btn ml-auto px-5 ${own ? "btn-primary" : ""}`} disabled={pickingBusy}>
+          {label}
+        </button>
+      </div>
+      <p className={`text-xs ${nudge ? "font-semibold text-ink" : "text-muted"}`} aria-live="polite">
+        {hint}
+      </p>
+    </form>
+  );
 
   return (
-    <div className="grid h-full grid-rows-[auto_1fr] p-2 pb-24 sm:p-3 sm:pb-24 lg:gap-y-4 lg:px-8 lg:pt-5">
-      <header className="row-start-1 flex items-center gap-4 pr-14 max-lg:pb-2">
-        <button type="button" onClick={onAbout} aria-label="About alienX" className="rounded-full">
+    <div className="grid h-full grid-rows-[auto_1fr] gap-y-2 p-2 pb-24 sm:p-3 sm:pb-24 lg:gap-y-4 lg:px-8 lg:pt-5">
+      <header className="flex min-w-0 items-center gap-3 pr-14 sm:gap-4">
+        <button type="button" onClick={onAbout} aria-label="About alienX" className="shrink-0 rounded-full">
           <Mascot blink={working} className="size-8 text-brand" />
         </button>
-        <div>
+        <div className="min-w-0">
           <ViewTitle name="Create" who={accounts.length === 1 ? accounts[0]!.name : accounts.length === 3 ? "all three" : "all accounts"} />
-          <p className="text-sm text-snow-muted max-sm:hidden">Start from an idea, pick the best of five drafts, approve it. It goes to the Studio ready to post.</p>
+          <p className="truncate text-sm text-snow-muted max-sm:hidden">Pick an idea or write your own. Approve the draft you like and it goes on the calendar.</p>
         </div>
+        {/* The drafts are kept while you look at the ideas; this brings them back. */}
+        {pane === "ideas" && authors.length > 0 && (
+          <button type="button" className="btn btn-ground ml-auto shrink-0 gap-2" onClick={() => setPane("drafts")}>
+            {working && <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-brand motion-reduce:animate-none" />}
+            {working ? "Drafting" : "Drafts"}
+            <span aria-hidden="true">→</span>
+          </button>
+        )}
       </header>
 
-      <main className="sheet tape row-start-2 grid min-h-0 w-full max-w-6xl justify-self-center lg:h-full lg:max-h-[46rem] lg:grid-cols-2 lg:grid-rows-1 lg:self-center">
+      <main
+        className={`sheet tape grid min-h-0 w-full max-w-6xl grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] justify-self-center gap-7 p-3 sm:p-4 lg:h-full lg:max-h-[46rem] lg:self-center lg:p-6 ${open ? "lg:grid-cols-[minmax(19rem,25rem)_minmax(0,1fr)]" : ""}`}
+      >
+        <section aria-label="Ideas" className={`flex min-h-0 flex-col ${open ? "max-lg:hidden" : ""}`}>
+          <Ideas
+            accounts={accounts}
+            topics={topics}
+            onDraft={draftIdea}
+            busy={busy}
+            fillOf={fillOf}
+            active={origin[view]?.idea?.id}
+            tried={tried}
+            quiet={deciding || own}
+            wide={!open}
+            composer={composer}
+            onTeach={() => openUpkeep("posts", accounts[0]!.handle)}
+          />
+        </section>
 
-        <section
-          aria-label="The idea"
-          onPointerDown={() => setFace("thought")}
-          onFocus={() => setFace("thought")}
-          className={`flex min-h-0 flex-col gap-3 p-4 transition-opacity duration-300 lg:p-6 ${face === "post" ? "max-lg:hidden lg:opacity-55 lg:hover:opacity-100" : ""}`}
-        >
-          {!solo && (
-          <Head n={0} current={current} title="Who is posting">
-            <button type="button" className="link" onClick={() => openUpkeep("posts", picking[0] ?? upkeep.who)}>
-              Accounts
-            </button>
-          </Head>
-          )}
-          <div role="group" aria-labelledby="step-0" className={`flex flex-wrap gap-2 ${solo ? "hidden" : ""}`}>
-            {accounts.map((a) => {
-              const on = picking.includes(a.handle);
-              // A chosen account carries its own pillar picker, joined to its switch.
-              const picker = on && a.pillars.length > 0;
-              return (
-                <span key={a.handle} className="inline-flex">
-                  <button
-                    type="button"
-                    aria-pressed={a.ready ? on : undefined}
-                    title={a.ready ? (a.type === "brand" ? `${a.name}, brand` : a.name) : "No voice yet. Add past posts."}
-                    onClick={() => toggle(a)}
-                    className={`pill inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-card border px-3 font-mono text-sm ${picker ? "rounded-r-none" : ""} ${on ? "border-brand bg-brand text-paper hover:border-brand-deep hover:bg-brand-deep" : a.ready ? "border-strong hover:border-ink active:bg-wash" : "border-dashed border-strong text-muted hover:border-ink"}`}
-                  >
-                    @{a.handle}
-                    {!a.ready && <span className="font-sans text-xs">no voice yet</span>}
-                  </button>
-                  {picker && (
-                    <select
-                      aria-label={`Pillar for @${a.handle}`}
-                      value={pillarOf[a.handle] ?? ""}
-                      onChange={(e) => setPillarOf((p) => ({ ...p, [a.handle]: e.target.value }))}
-                      className="field tight pill min-h-10 w-auto rounded-l-none border-l-0 border-brand bg-brand-wash text-xs font-medium text-brand hover:border-brand-deep"
-                    >
-                      <option value="">Any</option>
-                      {a.pillars.map((p) => (
-                        <option key={p}>{p}</option>
-                      ))}
-                    </select>
-                  )}
-                </span>
-              );
-            })}
-          </div>
-
-          <div className={`flex min-h-0 flex-1 flex-col gap-3 ${solo ? "" : "mt-4"}`}>
-            <Head n={1} current={current} title="Start from an idea">
-              <span className="segmented" style={{ "--at": startFrom === "ideas" ? 0 : 1 } as React.CSSProperties} role="group" aria-label="Start from">
-                <span aria-hidden="true" />
-                <button type="button" aria-pressed={startFrom === "ideas"} onClick={() => setStartFrom("ideas")}>
-                  Ideas{topics.length ? ` · ${topics.length}` : ""}
-                </button>
-                <button type="button" aria-pressed={startFrom === "own"} onClick={() => setStartFrom("own")}>
-                  Your own
-                </button>
-              </span>
-            </Head>
-            {/* Kept mounted, so a discovery in progress keeps running while you write your own. */}
-            <div hidden={startFrom !== "ideas"} className="flex min-h-0 flex-1 flex-col">
-              <Ideas accounts={accounts} topics={topics} onDraft={draftIdea} drafting={working} />
+        {open && (
+          // The bottom padding keeps Approve and what follows it clear of the activity card, which
+          // floats just above the dock while a job (such as the picture after approving) runs.
+          <section aria-labelledby="drafts-title" className="page-in flex min-h-0 flex-col gap-3 pb-[4.5rem] lg:border-l lg:border-line lg:pl-7">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+              <button type="button" className="link shrink-0 text-muted" onClick={() => setPane("ideas")}>
+                ← Back to ideas
+              </button>
+              <h3 id="drafts-title" ref={draftsTitle} tabIndex={-1} className="min-w-0 flex-1 basis-full truncate text-lg leading-tight font-semibold outline-none sm:basis-0">
+                <span className="text-muted">Drafts from </span>
+                {origin[view]?.title ?? "your words"}
+              </h3>
             </div>
-          <form
-            hidden={startFrom !== "own"}
-            className="flex min-h-0 flex-1 flex-col gap-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              run();
-            }}
-          >
-            {idea && (
-              <p className="flex items-center gap-2 rounded-[10px] bg-wash px-3 py-2 text-sm">
-                <span className="text-muted">From the idea</span>
-                <span className="min-w-0 flex-1 truncate font-semibold">{idea.title}</span>
-                <button type="button" className="link" onClick={() => setIdea(null)} aria-label="Drop the idea's sources">
-                  Detach
-                </button>
-              </p>
+
+            {authors.length > 1 && (
+              <fieldset className="flex min-w-0 flex-wrap gap-1.5">
+                <legend className="sr-only">Whose drafts</legend>
+                {authors.map((h) => (
+                  <label
+                    key={h}
+                    className={`pill inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-card border px-2.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand ${h === view ? "border-ink bg-ink text-paper" : "border-strong hover:border-ink active:bg-wash"}`}
+                  >
+                    <input type="radio" name="author" value={h} checked={h === view} onChange={() => setShown(h)} className="sr-only" />
+                    <span className="font-mono text-sm">@{h}</span>
+                    {/* Only a state worth noticing is named; five drafts waiting is the normal case. */}
+                    {errors[h] && !busy[h] ? <span className="tag">failed</span> : (busy[h] || picked(h)) && <span className="text-xs opacity-75">{busy[h] ? "drafting" : "picked"}</span>}
+                  </label>
+                ))}
+              </fieldset>
             )}
-            <textarea
-              ref={thought}
-              id="thought"
-              aria-labelledby="step-1"
-              rows={3}
-              value={seed}
-              onChange={(e) => {
-                setSeed(e.target.value);
-                setNudge(false);
-                // A different thought drops the idea, so its sources never ride on an unrelated post.
-                if (idea && !e.target.value.includes(idea.title)) setIdea(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                  e.preventDefault();
-                  run();
-                }
-              }}
-              placeholder="What's on your mind? A thought, something you noticed, a link."
-              maxLength={4000}
-              className="field min-h-20 flex-1 resize-none"
-            />
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <span className="segmented" style={{ "--at": format === "single" ? 0 : 1 } as React.CSSProperties} role="group" aria-label="Format">
-                <span aria-hidden="true" />
-                <button type="button" aria-pressed={format === "single"} onClick={() => setFormat("single")}>
-                  Single post
-                </button>
-                <button type="button" aria-pressed={format === "thread"} onClick={() => setFormat("thread")}>
-                  Thread
-                </button>
-              </span>
-              {/* One profile: what it is about, as chips. Any lets the drafts pick the pillar that fits. */}
-              {solo && accounts[0]!.pillars.length > 0 && (
-                <span className="flex flex-wrap gap-1.5" role="group" aria-label="About">
-                  {["", ...accounts[0]!.pillars].map((p) => {
-                    const on = (pillarOf[accounts[0]!.handle] ?? "") === p;
-                    return (
-                      <button
-                        key={p || "any"}
-                        type="button"
-                        aria-pressed={on}
-                        onClick={() => setPillarOf((x) => ({ ...x, [accounts[0]!.handle]: p }))}
-                        className={`pill min-h-9 rounded-[6px] border px-2.5 text-sm ${on ? "border-ink bg-ink text-paper" : "border-line text-muted hover:border-strong hover:text-ink"}`}
-                      >
-                        {p || "Any topic"}
-                      </button>
-                    );
-                  })}
-                </span>
+
+            {viewSet && (
+              <fieldset className="flex min-w-0 flex-wrap border-b border-line max-sm:justify-between">
+                <legend className="sr-only">Angle</legend>
+                {Object.keys(ANGLES).map((name) => {
+                  const d = viewSet.drafts.find((x) => x.angle === name);
+                  const s = d && statusOf(d);
+                  return (
+                    <label key={name} title={ANGLES[name]} className={`tab max-sm:px-0 max-sm:tracking-[0.03em] ${s === "rejected" ? "line-through" : ""}`}>
+                      <input type="radio" name="angle" value={name} checked={angle === name} onChange={() => setAngle(name)} className="sr-only" />
+                      {name}
+                      {viewSet.rec?.angle === name && (
+                        <>
+                          <Mascot className="size-3.5 text-pencil" />
+                          <span className="sr-only">, alienX recommends</span>
+                        </>
+                      )}
+                      {s === "approved" && <span aria-hidden="true" className="size-1.5 rounded-full bg-ink" />}
+                      {s && s !== "draft" && <span className="sr-only">, {s}</span>}
+                    </label>
+                  );
+                })}
+              </fieldset>
+            )}
+
+            <div className="flex min-h-0 flex-1 flex-col">
+              {busy[view] ? (
+                <div className="grid flex-1 place-items-center rounded-card bg-wash">
+                  <Working
+                    kind="draft"
+                    title="Studying the human."
+                    note={`Writing five angles for @${view} (story, contrarian, observation, lesson, question), each checked against X's rules. About half a minute; the ideas stay usable meanwhile.`}
+                    since={busyAt[view]}
+                  />
+                </div>
+              ) : errors[view] ? (
+                <Notice text="Signal lost. Try again." note={errors[view]} alert>
+                  <button type="button" className="btn btn-primary" onClick={() => retry(view)}>
+                    Try again
+                  </button>
+                </Notice>
+              ) : null}
+              {/* Every draft stays mounted so its edits and decision survive switching tabs; only one shows. */}
+              {Object.entries(sets).flatMap(([h, set]) =>
+                set.drafts.map((d) => (
+                  <Card
+                    key={d.id}
+                    hidden={set !== viewSet || d.angle !== angle}
+                    draft={d}
+                    allow={set.allow}
+                    picked={picked(h)}
+                    account={accounts.find((a) => a.handle === h)}
+                    topicId={set.topicId}
+                    recommend={set.rec?.id === d.id ? set.rec.reason : undefined}
+                    next={next}
+                    onOpenStudio={onOpenStudio}
+                    onAnother={another}
+                    onDecided={(status) => setDecided((all) => ({ ...all, [d.id]: status }))}
+                  />
+                )),
               )}
             </div>
-            {/* Red from the first moment: this is the one action. Pressed too early, it says what is missing. */}
-            <button type="submit" className={`btn mt-1 py-3.5 text-base ${repeat ? "" : "btn-primary"}`} disabled={working}>
-              {label}
-            </button>
-            <p className={`text-sm ${nudge ? "font-medium text-ink" : "text-muted"}`} aria-live="polite">
-              {hint}
-            </p>
-            {solo && (
-              <button type="button" className="link justify-self-start text-muted" onClick={() => openUpkeep("posts", accounts[0]!.handle)}>
-                Teach the voice with past posts
-              </button>
-            )}
-          </form>
-          </div>
-        </section>
-
-        <section
-          aria-label="The drafts"
-          onPointerDown={() => setFace("post")}
-          onFocus={() => setFace("post")}
-          className={`flex min-h-0 flex-col gap-3 p-4 transition-opacity duration-300 lg:border-l lg:border-line lg:p-6 ${face === "thought" ? "max-lg:hidden lg:opacity-55 lg:hover:opacity-100" : ""}`}
-        >
-          <Head n={2} current={current} title="Choose and approve">
-            {/* On a phone the chosen author tab right below already names the account. */}
-            {viewSet && <p className="min-w-0 truncate text-sm text-muted max-sm:hidden">Approve one, or reject with a reason to teach @{view}.</p>}
-          </Head>
-
-          {authors.length > 1 && (
-            <fieldset className="flex min-w-0 flex-wrap gap-1.5">
-              <legend className="sr-only">Whose drafts</legend>
-              {authors.map((h) => (
-                <label
-                  key={h}
-                  className={`pill inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-card border px-2.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand ${h === view ? "border-brand bg-brand-wash text-brand" : "border-strong hover:border-ink active:bg-wash"}`}
-                >
-                  <input type="radio" name="author" value={h} checked={h === view} onChange={() => setShown(h)} className="sr-only" />
-                  <span className="font-mono text-sm">@{h}</span>
-                  {/* Only a state worth noticing is named; five drafts waiting is the normal case. */}
-                  {/* A failure is state, so it is a black tag; red never warns. */}
-                  {errors[h] && !busy[h] ? (
-                    <span className="tag">failed</span>
-                  ) : (
-                    (busy[h] || picked(h)) && <span className={`text-xs ${h === view ? "" : "text-muted"}`}>{busy[h] ? "drafting" : "picked"}</span>
-                  )}
-                </label>
-              ))}
-            </fieldset>
-          )}
-
-          {viewSet && (
-            <fieldset className="flex min-w-0 flex-wrap border-b border-line max-sm:justify-between">
-              <legend className="sr-only">Angle</legend>
-              {Object.keys(ANGLES).map((name) => {
-                const d = viewSet.drafts.find((x) => x.angle === name);
-                const s = d && statusOf(d);
-                return (
-                  <label key={name} title={ANGLES[name]} className={`tab max-sm:px-0 max-sm:tracking-[0.03em] ${s === "rejected" ? "line-through" : ""}`}>
-                    <input type="radio" name="angle" value={name} checked={angle === name} onChange={() => setAngle(name)} className="sr-only" />
-                    {name}
-                    {s === "approved" && <span aria-hidden="true" className="size-1.5 rounded-full bg-ink" />}
-                    {s && s !== "draft" && <span className="sr-only">, {s}</span>}
-                  </label>
-                );
-              })}
-            </fieldset>
-          )}
-
-          <div className="flex min-h-0 flex-1 flex-col">
-            {!view ? (
-              <Notice text="No drafts yet." note="Pick an idea in step 1, or write your own. Five drafts in your voice land here.">
-                <button type="button" className="btn" onClick={() => setFace("thought")}>
-                  Back to 1 Idea
-                </button>
-              </Notice>
-            ) : busy[view] ? (
-              <div className="grid flex-1 place-items-center">
-                <Working
-                  kind="draft"
-                  title="Studying the human."
-                  note={`Writing five angles for @${view} (story, contrarian, observation, lesson, question), each checked against X's rules. About half a minute; you can keep looking around.`}
-                  since={busyAt[view]}
-                />
-              </div>
-            ) : errors[view] ? (
-              <Notice text="Signal lost. Try again." note={errors[view]} alert>
-                <button type="button" className="btn" onClick={() => run([view])}>
-                  Try again
-                </button>
-              </Notice>
-            ) : null}
-            {/* Every draft stays mounted so its edits and decision survive switching tabs; only one shows. */}
-            {Object.entries(sets).flatMap(([h, set]) =>
-              set.drafts.map((d) => (
-                <Card
-                  key={d.id}
-                  hidden={set !== viewSet || d.angle !== angle}
-                  draft={d}
-                  allow={set.allow}
-                  picked={picked(h)}
-                  account={accounts.find((a) => a.handle === h)}
-                  topicId={set.topicId}
-                  onOpenStudio={onOpenStudio}
-                  onDecided={(status) => setDecided((all) => ({ ...all, [d.id]: status }))}
-                />
-              )),
-            )}
-          </div>
-        </section>
+          </section>
+        )}
       </main>
 
       <Accounts
@@ -467,31 +546,12 @@ export function Studio({
   );
 }
 
-// A step's heading, signed like a wayfinding panel: the step to do now is red,
-// finished steps are black, and the ones still ahead are grey.
-function Head({ n, current, title, children }: { n: number; current: number; title: string; children?: React.ReactNode }) {
-  const tone = n === current ? "text-brand" : n < current ? "text-ink" : "text-strong";
-  return (
-    <div className="flex items-baseline justify-between gap-x-4">
-      <h2 id={`step-${n}`} aria-current={n === current ? "step" : undefined} className="flex shrink-0 items-baseline gap-2.5 text-lg leading-tight font-medium">
-        {n > 0 && (
-          <span aria-hidden="true" className={`font-mono transition-colors duration-150 motion-reduce:transition-none ${tone}`}>
-            {n}
-          </span>
-        )}
-        {title}
-      </h2>
-      {children}
-    </div>
-  );
-}
-
-// Empty, loading and failed states fill the post face. The eyes blink only while drafts are being made.
-function Notice({ text, note, blink = false, alert = false, children }: { text: string; note?: string; blink?: boolean; alert?: boolean; children?: React.ReactNode }) {
+// A failed state fills the drafts area.
+function Notice({ text, note, alert = false, children }: { text: string; note?: string; alert?: boolean; children?: React.ReactNode }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 py-6 text-center" role={alert ? "alert" : undefined} aria-live={alert ? undefined : "polite"}>
-      <Mascot blink={blink} className={`size-14 ${blink ? "text-brand" : "text-muted"}`} />
-      <p className={blink || alert ? "font-medium" : "text-muted"}>{text}</p>
+      <Mascot className="size-14 text-muted" />
+      <p className="font-medium">{text}</p>
       {note && <p className={`max-w-sm ${alert ? "font-mono text-xs text-muted" : "text-sm text-muted"}`}>{note}</p>}
       {children}
     </div>
@@ -505,7 +565,10 @@ function Card({
   hidden,
   account,
   topicId,
+  recommend,
+  next,
   onOpenStudio,
+  onAnother,
   onDecided,
 }: {
   draft: Draft;
@@ -514,7 +577,10 @@ function Card({
   hidden: boolean;
   account?: AccountInfo;
   topicId?: number;
+  recommend?: string;
+  next?: Next;
   onOpenStudio?: () => void;
+  onAnother: () => void;
   onDecided: (status: Status) => void;
 }) {
   // Edit the words, or see them as the feed will show them.
@@ -587,6 +653,15 @@ function Card({
           </button>
         </span>
       </div>
+      {recommend && (
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+          <span className="stamp gap-1 px-1.5 py-0.5 text-xs">
+            <Mascot className="size-3.5 text-pencil" />
+            alienX recommends
+          </span>
+          {recommend}
+        </p>
+      )}
       {!single && (
         <div className="flex items-center justify-end gap-3">
           <span className="flex gap-2">
@@ -667,70 +742,102 @@ function Card({
         )}
       </div>
 
-      {/* One row of actions. A decision, the reject reason and the saved note all take its place. */}
-      <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
-        {status !== "draft" ? (
-          <>
-            <span className={`stamp ${status === "approved" ? "stamp-solid" : ""}`}>{status}</span>
-            {/* The sentence sits under the row, so Copy stays where it was. On a phone
-                the stamp says it; the sentence stays for screen readers. */}
-            <span className="order-last basis-full text-sm text-muted max-sm:sr-only">{status === "approved" ? (scheduled ? (topicId ? `Approved. Its picture, sources and first reply are being made, and it is on the Studio calendar for ${when(scheduled.at)} IST.` : `Approved. Its picture is being drawn, and it is on the Studio calendar for ${when(scheduled.at)} IST.`) : "Saved. The next drafts learn from this.") : "Saved with your reason. The next drafts avoid this."}</span>
+      {/* One action on the draft: Approve. Once decided, the row turns into what happened and
+          where to go next, in place. Reject with a reason stays quiet beside Approve. */}
+      {status === "approved" ? (
+        <div className="reveal grid gap-3 rounded-card border-2 border-ink p-3.5 sm:p-4" role="status">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span className="stamp stamp-solid">approved</span>
+            <p className="min-w-0 flex-1 font-semibold">{scheduled ? `On the Studio calendar for ${when(scheduled.at)} IST` : "Approved. The next drafts learn from this."}</p>
+          </div>
+          {scheduled && <p className="text-sm text-muted">{topicId ? "Its picture, sources and first reply are being made." : "Its picture is being drawn."}</p>}
+          <div className="flex flex-wrap items-center gap-2">
             {scheduled && onOpenStudio && (
-              <button type="button" className="btn btn-primary" onClick={onOpenStudio}>
-                Next: 3 Studio
+              <button type="button" className="btn btn-primary px-5" onClick={onOpenStudio}>
+                See it in Studio
               </button>
             )}
-            <button type="button" className="link" disabled={busy} onClick={() => decide("draft")}>
+            <button type="button" className="btn" onClick={onAnother}>
+              Make another
+            </button>
+            <button type="button" className="link ml-auto text-muted" disabled={busy} onClick={() => decide("draft")}>
               Undo
             </button>
-          </>
-        ) : rejecting ? (
-          <form
-            className="reveal flex min-w-0 flex-1 gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              decide("rejected");
-            }}
-          >
-            <input
-              id={`reason-${draft.id}`}
-              aria-label="Reason for rejecting"
-              autoFocus
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Why. One line."
-              maxLength={200}
-              className="field min-w-0 flex-1"
-            />
-            <button type="submit" className="btn btn-dark" disabled={busy || !reason.trim()}>
-              Reject
-            </button>
-            <button type="button" className="btn" onClick={() => setRejecting(false)}>
-              Cancel
-            </button>
-          </form>
-        ) : (
-          <>
-            <button type="button" className="btn btn-primary" disabled={busy || long >= 0} onClick={schedule}>
-              Approve
-            </button>
-            <button type="button" className="btn" disabled={busy} onClick={() => setRejecting(true)}>
-              Reject
-            </button>
-          </>
-        )}
-        {/* Posting happens in the Studio, after approval; here a draft can only be copied. */}
-        {!rejecting && (
-          <span className="ml-auto flex gap-2">
-            <Copy text={text} />
-          </span>
-        )}
-        {failed && (
-          <p className="basis-full text-sm font-medium" role="alert">
-            Signal lost. Try again.
-          </p>
-        )}
-      </div>
+          </div>
+          {scheduled && next && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-3 text-sm">
+              <p className="min-w-0 flex-1 basis-56">
+                <span className="font-semibold">Next: </span>
+                {next.text}
+              </p>
+              <button type="button" className="btn" onClick={next.go}>
+                {next.label}
+              </button>
+              <button type="button" className="link text-xs text-muted" onClick={next.dismiss}>
+                Not now
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
+          {status === "rejected" ? (
+            <>
+              <span className="stamp">rejected</span>
+              <span className="text-sm text-muted max-sm:sr-only">Saved with your reason. The next drafts avoid this.</span>
+              <button type="button" className="link" disabled={busy} onClick={() => decide("draft")}>
+                Undo
+              </button>
+            </>
+          ) : rejecting ? (
+            <form
+              className="reveal flex min-w-0 flex-1 gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                decide("rejected");
+              }}
+            >
+              <input
+                id={`reason-${draft.id}`}
+                aria-label="Reason for rejecting"
+                autoFocus
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Why. One line."
+                maxLength={200}
+                className="field min-w-0 flex-1"
+              />
+              <button type="submit" className="btn btn-dark" disabled={busy || !reason.trim()}>
+                Reject
+              </button>
+              <button type="button" className="btn" onClick={() => setRejecting(false)}>
+                Cancel
+              </button>
+            </form>
+          ) : (
+            <>
+              {/* Solid red marks the draft to post: every draft until one is approved. */}
+              <button type="button" className={`btn px-6 py-2.5 text-base ${picked ? "" : "btn-primary"}`} disabled={busy || long >= 0} onClick={schedule}>
+                {busy ? "Approving…" : "Approve"}
+              </button>
+              <Copy text={text} />
+              <button type="button" className="link ml-auto text-muted" disabled={busy} onClick={() => setRejecting(true)}>
+                Reject with a reason
+              </button>
+            </>
+          )}
+          {failed && (
+            <p className="basis-full text-sm font-medium" role="alert">
+              Signal lost. Try again.
+            </p>
+          )}
+        </div>
+      )}
+      {status === "approved" && failed && (
+        <p className="text-sm font-medium" role="alert">
+          Signal lost. Try again.
+        </p>
+      )}
     </article>
   );
 }

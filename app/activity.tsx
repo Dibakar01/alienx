@@ -71,8 +71,9 @@ function Running({ job, onGo }: { job: Job; onGo?: (w: Where) => void }) {
   // An estimate, said as one: the bar fills toward "usual" and waits near the end.
   const fill = Math.min(94, (s / job.typical) * 88);
   return (
-    <div className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-3">
-      <span className="aspect-[5/3] overflow-hidden rounded-[8px] bg-wash">
+    <div className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-3 max-sm:grid-cols-[minmax(0,1fr)_auto] max-sm:gap-2">
+      {/* On a phone the moving picture goes, so the card stays one slim row above the dock. */}
+      <span className="aspect-[5/3] overflow-hidden rounded-[8px] bg-wash max-sm:hidden">
         <Vignette kind={job.kind} />
       </span>
       <span className="grid min-w-0 gap-1">
@@ -80,7 +81,7 @@ function Running({ job, onGo }: { job: Job; onGo?: (w: Where) => void }) {
         <span className="h-1.5 overflow-hidden rounded-full bg-wash" aria-hidden="true">
           <span className={`block h-full rounded-full bg-brand transition-[width] duration-1000 ease-linear ${late ? "animate-pulse" : ""}`} style={{ width: `${fill}%` }} />
         </span>
-        <span className="text-xs text-muted tabular-nums">
+        <span className="text-xs text-muted tabular-nums max-sm:text-[11px]">
           {clock(s)} · {late ? "taking longer than usual, still working" : `usually about ${clock(job.typical)}`}
         </span>
       </span>
@@ -149,7 +150,7 @@ export function Activity({ onGo, only }: { onGo?: (w: Where) => void; only?: str
   return (
     <div role="status" aria-live="polite" aria-label="What alienX is doing" className="fixed bottom-[5.6rem] left-1/2 z-30 grid w-[min(30rem,calc(100%-1.5rem))] -translate-x-1/2 gap-2">
       {(mine.length > 0 || theirs.length > 0) && (
-        <div className="page-in grid gap-2.5 rounded-[14px] border border-line bg-paper p-2.5 pr-3 text-ink shadow-object">
+        <div className="page-in grid gap-2.5 rounded-[14px] border border-line bg-paper p-2.5 pr-3 text-ink shadow-object max-sm:gap-1.5 max-sm:p-2">
           {mine[0] && <Running key={mine[0].id} job={mine[0]} onGo={onGo} />}
           {mine.slice(1).map((j) => (
             <span key={j.id} className="border-t border-line pt-2 text-xs">

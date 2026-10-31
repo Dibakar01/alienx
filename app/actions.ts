@@ -70,6 +70,7 @@ const Change = z.discriminatedUnion("do", [
   z.object({ do: z.literal("kill"), id: Id, undo: z.boolean().optional() }),
   z.object({ do: z.literal("restore"), id: Id }),
   z.object({ do: z.literal("posted"), id: Id }),
+  z.object({ do: z.literal("keep"), id: Id }),
 ]);
 
 // Everything the owner can do to a scheduled post during its veto window, and after.
@@ -95,6 +96,10 @@ export async function changePostAction(input: unknown): Promise<{ post?: Post; e
       if (p.status !== "killed") throw new Error("That post was not killed.");
       // Undo of a kill: back on the schedule, or straight to due if its slot passed meanwhile.
       post = updatePost(p.id, { status: p.scheduled_at <= now.toISOString() ? "due" : "scheduled" });
+    } else if (c.do === "keep") {
+      // Yes to alienX's pick: its draft is approved, so it stops asking for a review.
+      if (p.draft_id) decide(p.draft_id, "approved", p.posts);
+      post = getPost(p.id);
     } else {
       post = updatePost(p.id, { status: "posted", posted_at: now.toISOString() });
       // Posting a researched draft is the owner's approval of it.

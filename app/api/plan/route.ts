@@ -1,6 +1,6 @@
 import { sameOrigin } from "../../../lib/origin.ts";
 import { draftTopic, pickFor, research } from "../../../lib/plan.ts";
-import type { Post } from "../../../lib/db.ts";
+import type { Post, Topic } from "../../../lib/db.ts";
 import { slowJson } from "../../../lib/respond.ts";
 
 // { research: handle } discovers new ideas for one account now (Create's "Discover new ideas",
@@ -9,7 +9,10 @@ import { slowJson } from "../../../lib/respond.ts";
 // longer than the tunnel waits for a first byte, so the reply is streamed. { pick: handle }
 // books alienX's pick when the account has nothing coming (see pickFor). A second ask while
 // one runs (a reload, another tab) joins it, so the page can show it again until it lands.
+// Discovering joins a run in progress the same way, so alienX topping up ideas by itself and
+// someone pressing Discover never search twice at once.
 const picking = new Map<string, Promise<Post | null>>();
+const finding = new Map<string, Promise<Topic[]>>();
 export async function POST(request: Request): Promise<Response> {
   if (!sameOrigin(request)) return Response.json({ error: "Refused." }, { status: 403 });
   const body = ((await request.json().catch(() => ({}))) ?? {}) as { id?: unknown; research?: unknown; pick?: unknown };
@@ -26,7 +29,13 @@ export async function POST(request: Request): Promise<Response> {
   if (Number.isInteger(body.id)) return slowJson(async () => ({ post: await draftTopic(body.id as number) }));
   if (typeof body.research === "string" && /^[A-Za-z0-9_]{1,15}$/.test(body.research)) {
     const handle = body.research;
-    return slowJson(async () => ({ topics: await research(handle) }));
+    let run = finding.get(handle);
+    if (!run) {
+      run = research(handle).finally(() => finding.delete(handle));
+      finding.set(handle, run);
+    }
+    const job = run;
+    return slowJson(async () => ({ topics: await job }));
   }
   return Response.json({ error: "Which topic or account?" });
 }

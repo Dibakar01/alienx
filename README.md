@@ -4,6 +4,19 @@ alienX runs a small team's X presence with the founders as editors. Each week it
 
 It is built for [Qalakaar](https://qalakaar.com) and its three accounts, and it runs on one Mac at no cost: model calls go through the Claude Code CLI on a Claude subscription, never a paid API.
 
+![The Studio: a week of approved posts on a calendar, the week's numbers, and what alienX suggests next](docs/screenshots/04-studio.png)
+
+| | |
+|---|---|
+| ![Who is posting: a rotary dial with each account in a finger hole](docs/screenshots/02-dial.png) | ![Create: alienX's recommended idea, your own words, and more ideas](docs/screenshots/03-create.png) |
+| **Who is posting.** Turn the dial; a red dot marks an account that needs you. | **Create.** One tap on an idea writes five drafts; approve one and it is on the calendar. |
+| ![A post opened from the Studio: alienX's check, then the steps to post in order](docs/screenshots/05-post.png) | ![The Studio in light mode](docs/screenshots/06-studio-light.png) |
+| **Posting.** alienX checks it, then the steps run in order: check the words, post to X, mark as posted. | **Light and dark.** Follows your system; one switch overrides it. |
+
+<p align="center"><img src="docs/screenshots/07-phone-create.png" width="260" alt="Create on a phone"> <img src="docs/screenshots/08-phone-studio.png" width="260" alt="The Studio on a phone"></p>
+
+*Screenshots use made-up demo posts and ideas.*
+
 ## Install in one line
 
 On a Mac with [Node 24+](https://nodejs.org), [Google Chrome](https://www.google.com/chrome) and the [Claude Code CLI](https://claude.com/claude-code) signed in with your Claude plan, paste this into Terminal:
@@ -25,10 +38,11 @@ The first screen explains alienX, then walks you through adding your accounts. F
 - **Drafts written for X.** Five drafts per idea or thought, one per angle (story, contrarian, observation, lesson, question). The rules follow X's open-source ranker, which favours replies, quotes, shares and read-through over likes. Each draft gets a hook first line, short lines, one concrete detail, an ending worth answering or forwarding, and no link (the source goes in a ready-made first reply). Code checks length the way X counts it, the shape, and the style rules. Every claim is tagged facts, your thought, research (with its link) or unverified.
 - **Images.** The model plans a visual metaphor, choosing objects and a composition (hero, versus, twist, scale, odd one out) with at most three words on the image. Code draws it deterministically as an SVG in the Qalakaar One Flow scrapbook style, and headless Chrome turns it into a 1600×900 PNG.
 - **Schedule.** India-time windows per account, at most one post a day, three hours apart, three a week (`config/slots.json`). A one-minute clock marks posts due and sends a macOS notification.
-- **alienX's pick.** Once a day, every account with a voice and nothing coming gets one approved post: alienX takes its best waiting idea (discovering some first if none wait, and mixing angles), drafts it, draws it and books the next slot the cadence allows, at least three hours out. It shows on the calendar as "alienX pick" until you change or approve it. It runs when you open a profile and, with the agents installed, every morning at 07:30.
-- **The app, in the order you use it.** A landing page explains alienX once (the alien mark at the top left brings it back), then you turn the dial to who is posting (one account, all of them, or Add an account). The dock walks through three numbered steps:
-  - **1 Idea** and **2 Approve** are the two halves of Create: start from an idea alienX discovered or your own thought, get five drafts in the account's voice (each shown as it will look on X), and approve one.
-  - **3 Studio** is the calendar of approved posts, each with its picture, sources, first reply and tags (angle, pillar, origin). Open one to post it with one tap, drag it to another day, edit it, redraw its picture, or kill it.
+- **alienX manages on your behalf.** Once a day, every account with a voice and nothing coming gets one post booked: alienX takes its best waiting idea (mixing angles), drafts it, draws it and books the next slot the cadence allows, at least three hours out. It shows on the calendar as "alienX pick" until you keep it (one tap) or change it. An account down to fewer than two ideas gets fresh ones discovered. It runs when you open a profile and, with the agents installed, every morning at 07:30.
+- **alienX suggests.** Everywhere it helps, alienX says what it would do next, worked out only from the calendar, the waiting ideas and each account's cadence (`lib/suggest.ts`): a post due now, a pick to keep, a week short of its cadence ("Fill Sunday with this idea", one tap drafts it), a missing picture, a claim to check, ideas running low. The Studio shows them under its numbers and pencils a suggested post into the open slot; Create recommends an idea and the strongest of its five drafts, with the reason; the post view checks a post before you post it; the dial marks accounts that need you. "Not today" hides one for the day on every screen. It never invents reach or timing insights it has no data for.
+- **The app, in the order you use it.** A landing page explains alienX once (the alien mark at the top left brings it back), then you turn the dial to who is posting (one account, all of them, or Add an account). The dock has two labelled steps (keys 1 and 2 switch between them):
+  - **1 Create** is one surface: alienX's recommended idea on top, your own words below, more ideas beside. One tap writes five drafts in the account's voice, shown as they will look on X, with alienX's pick of the five preselected. Approve it and it is on the calendar, with its picture drawn in the background; "See it in Studio" or "Make another".
+  - **2 Studio** is a Monday-to-Sunday calendar in India time: an hour grid, each account's posting windows shaded, a red line for now, and the week's numbers on top (cadence per account, next post, due now, picks to keep, posted). Open a post to see alienX's check and the steps to post it in order; drag it to another day; edit it, redraw its picture, or kill it.
   Nothing reaches the calendar without a founder's approval, except alienX's one daily pick, and nothing is ever posted without your tap.
 
 ## Private data stays out of git
