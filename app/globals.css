@@ -1,0 +1,540 @@
+@import "tailwindcss";
+
+/* alienX tokens, in the Qalakaar One Flow system (the "Qalakaar · one flow" canvas).
+   Every colour and font is defined here and nowhere else. The page is a dark ground; work
+   sits on torn paper sheets held down with tape; Qalakaar red marks the one action or what
+   needs you. The image renderer (lib/art.ts) draws pixels and keeps its own copy of the
+   paper palette, which is not UI. */
+:root {
+  color-scheme: dark;
+
+  --red: #D92819;
+  --white: #FBFAF8; /* the sheet: every surface you read or type on */
+  --black: #16130F; /* ink on paper */
+  --ground: #0C0C0D; /* the page behind the sheets */
+  --paper: #F4F2F1; /* the paper under a sheet, wells and quiet panels */
+  --pencil: #5E5852; /* hand-drawn marks and pencil notes */
+  --tape: rgba(206, 197, 184, 0.72);
+  --snow: #FFFFFF; /* ink on the ground, and the sticker edge */
+  --panel: #1A1A1D; /* dark chrome on the ground: the dock, chips */
+
+  /* Mixes of the colours above, so no other colour exists. */
+  --red-deep: color-mix(in srgb, var(--red) 80%, var(--black)); /* pressed red */
+  --red-wash: color-mix(in srgb, var(--red) 8%, var(--white)); /* quiet red fill on paper */
+  --black-soft: color-mix(in srgb, var(--black) 80%, var(--white)); /* pressed ink */
+  --grey: color-mix(in srgb, var(--black) 72%, var(--white)); /* secondary text on paper */
+  --rule-strong: color-mix(in srgb, var(--black) 40%, var(--white)); /* outlines of things you can use */
+  --rule: color-mix(in srgb, var(--black) 12%, var(--white)); /* dividers on paper */
+  --wash: var(--paper);
+  --snow-muted: color-mix(in srgb, var(--snow) 76%, transparent); /* secondary text on the ground */
+  --snow-faint: color-mix(in srgb, var(--snow) 62%, transparent);
+  --snow-line: color-mix(in srgb, var(--snow) 10%, transparent); /* lines on the ground */
+  --snow-line-strong: color-mix(in srgb, var(--snow) 20%, transparent);
+  --glass: color-mix(in srgb, var(--panel) 72%, transparent); /* the dock's material */
+
+  /* A sheet's fall onto the ground. */
+  --lift: 0 14px 18px color-mix(in srgb, black 32%, transparent), 0 2px 3px color-mix(in srgb, black 20%, transparent);
+
+  --font-ui: var(--font-outfit, "Helvetica Neue"), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-code: var(--font-ui); /* One Flow uses one typeface; counts use tabular figures */
+  /* Draft post text: the system stack, so a draft looks the way it will on X. */
+  --font-x: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  --radius: 10px; /* anything pressable */
+  --radius-lg: 14px; /* containers */
+
+  /* One Flow motion: moves to explain, never to decorate. One spring for anything that moves,
+     transform and opacity only, feedback on pointer-down. */
+  --ease-pop: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --spring: linear(0, 0.078 5%, 0.235 10%, 0.401 15%, 0.549 20%, 0.669 25%, 0.762 30%, 0.831 35%, 0.882 40%, 0.918 45%, 0.944 50%, 0.974 60%, 0.988 70%, 0.995 80%, 0.998 90%, 1);
+  --spring-bounce: linear(0, 0.086 5%, 0.267 10%, 0.464 15%, 0.639 20%, 0.776 25%, 0.875 30%, 0.941 35%, 0.981 40%, 1.003 45%, 1.012 50%, 1.014 60%, 1.009 70%, 1.004 80%, 1.001 90%, 1);
+  --dur-press: 0.1s;
+  --dur-release: 0.3s;
+  --dur-quick: 0.45s;
+  --dur-spring: 0.6s;
+  --dur-exit: 0.16s;
+  --stagger: 40ms;
+
+  /* Torn paper edges and a tape strip, from the One Flow scrapbook layer. */
+  --torn-a: polygon(0.0% 1.2px,2.5% 2.7px,5.0% 1.8px,7.5% 3.0px,10.0% 3.1px,12.5% 0.3px,15.0% 0.1px,17.5% 4.2px,20.0% 1.3px,22.5% 1.2px,25.0% 5.0px,27.5% 2.4px,30.0% 4.2px,32.5% 2.4px,35.0% 3.2px,37.5% 0.8px,40.0% 3.2px,42.5% 4.3px,45.0% 2.6px,47.5% 3.7px,50.0% 3.4px,52.5% 0.3px,55.0% 3.8px,57.5% 3.0px,60.0% 1.5px,62.5% 0.2px,65.0% 4.3px,67.5% 2.4px,70.0% 3.6px,72.5% 4.4px,75.0% 3.6px,77.5% 4.6px,80.0% 2.0px,82.5% 4.0px,85.0% 2.2px,87.5% 4.7px,90.0% 4.4px,92.5% 0.5px,95.0% 0.7px,97.5% 1.1px,100.0% 4.8px,calc(100% - 0.7px) 12.5%,calc(100% - 1.0px) 25.0%,calc(100% - 0.5px) 37.5%,calc(100% - 0.8px) 50.0%,calc(100% - 0.6px) 62.5%,calc(100% - 0.6px) 75.0%,calc(100% - 0.9px) 87.5%,100.0% calc(100% - 2.9px),97.5% calc(100% - 4.5px),95.0% calc(100% - 3.4px),92.5% calc(100% - 4.6px),90.0% calc(100% - 4.3px),87.5% calc(100% - 5.0px),85.0% calc(100% - 3.4px),82.5% calc(100% - 0.8px),80.0% calc(100% - 4.3px),77.5% calc(100% - 4.8px),75.0% calc(100% - 4.5px),72.5% calc(100% - 2.8px),70.0% calc(100% - 3.6px),67.5% calc(100% - 1.1px),65.0% calc(100% - 4.2px),62.5% calc(100% - 2.9px),60.0% calc(100% - 1.4px),57.5% calc(100% - 0.3px),55.0% calc(100% - 4.3px),52.5% calc(100% - 4.9px),50.0% calc(100% - 0.4px),47.5% calc(100% - 4.0px),45.0% calc(100% - 2.1px),42.5% calc(100% - 0.8px),40.0% calc(100% - 1.5px),37.5% calc(100% - 3.8px),35.0% calc(100% - 4.4px),32.5% calc(100% - 0.2px),30.0% calc(100% - 3.1px),27.5% calc(100% - 0.2px),25.0% calc(100% - 3.6px),22.5% calc(100% - 1.7px),20.0% calc(100% - 4.4px),17.5% calc(100% - 4.9px),15.0% calc(100% - 2.5px),12.5% calc(100% - 5.0px),10.0% calc(100% - 1.5px),7.5% calc(100% - 0.4px),5.0% calc(100% - 3.0px),2.5% calc(100% - 0.2px),0.0% calc(100% - 1.0px),0.7px 87.5%,1.0px 75.0%,0.2px 62.5%,0.1px 50.0%,1.4px 37.5%,0.5px 25.0%,1.5px 12.5%);
+  --torn-b: polygon(0.0% 1.6px,2.5% 0.8px,5.0% 3.3px,7.5% 0.4px,10.0% 2.7px,12.5% 1.8px,15.0% 0.3px,17.5% 2.5px,20.0% 0.2px,22.5% 2.2px,25.0% 0.3px,27.5% 0.5px,30.0% 2.1px,32.5% 4.1px,35.0% 0.6px,37.5% 1.1px,40.0% 3.1px,42.5% 4.7px,45.0% 2.9px,47.5% 2.0px,50.0% 4.9px,52.5% 0.2px,55.0% 4.3px,57.5% 1.4px,60.0% 0.7px,62.5% 0.6px,65.0% 1.5px,67.5% 4.1px,70.0% 0.9px,72.5% 2.9px,75.0% 3.2px,77.5% 1.9px,80.0% 2.7px,82.5% 0.3px,85.0% 0.3px,87.5% 1.0px,90.0% 3.4px,92.5% 2.1px,95.0% 1.6px,97.5% 2.9px,100.0% 2.3px,calc(100% - 0.5px) 12.5%,calc(100% - 1.3px) 25.0%,calc(100% - 1.1px) 37.5%,calc(100% - 0.4px) 50.0%,calc(100% - 0.9px) 62.5%,calc(100% - 0.8px) 75.0%,calc(100% - 1.4px) 87.5%,100.0% calc(100% - 3.6px),97.5% calc(100% - 1.4px),95.0% calc(100% - 4.9px),92.5% calc(100% - 0.6px),90.0% calc(100% - 2.1px),87.5% calc(100% - 3.8px),85.0% calc(100% - 0.8px),82.5% calc(100% - 2.4px),80.0% calc(100% - 0.2px),77.5% calc(100% - 3.3px),75.0% calc(100% - 3.8px),72.5% calc(100% - 2.9px),70.0% calc(100% - 4.4px),67.5% calc(100% - 1.6px),65.0% calc(100% - 3.5px),62.5% calc(100% - 3.0px),60.0% calc(100% - 2.9px),57.5% calc(100% - 2.3px),55.0% calc(100% - 4.2px),52.5% calc(100% - 4.7px),50.0% calc(100% - 2.4px),47.5% calc(100% - 3.3px),45.0% calc(100% - 0.3px),42.5% calc(100% - 3.5px),40.0% calc(100% - 3.2px),37.5% calc(100% - 5.0px),35.0% calc(100% - 4.1px),32.5% calc(100% - 1.4px),30.0% calc(100% - 1.9px),27.5% calc(100% - 3.3px),25.0% calc(100% - 0.1px),22.5% calc(100% - 2.3px),20.0% calc(100% - 0.8px),17.5% calc(100% - 0.6px),15.0% calc(100% - 0.3px),12.5% calc(100% - 3.8px),10.0% calc(100% - 0.6px),7.5% calc(100% - 1.2px),5.0% calc(100% - 2.0px),2.5% calc(100% - 4.4px),0.0% calc(100% - 0.4px),0.7px 87.5%,0.9px 75.0%,1.4px 62.5%,1.3px 50.0%,1.4px 37.5%,0.4px 25.0%,0.7px 12.5%);
+  --torn-c: polygon(0.0% 2.3px,2.5% 2.8px,5.0% 4.6px,7.5% 2.3px,10.0% 2.5px,12.5% 2.9px,15.0% 0.9px,17.5% 2.6px,20.0% 3.1px,22.5% 4.0px,25.0% 0.5px,27.5% 1.5px,30.0% 0.5px,32.5% 4.0px,35.0% 3.5px,37.5% 0.2px,40.0% 4.9px,42.5% 4.8px,45.0% 3.3px,47.5% 3.1px,50.0% 0.8px,52.5% 0.1px,55.0% 2.6px,57.5% 0.3px,60.0% 1.0px,62.5% 1.2px,65.0% 0.2px,67.5% 2.3px,70.0% 2.2px,72.5% 4.2px,75.0% 2.6px,77.5% 3.2px,80.0% 2.5px,82.5% 3.3px,85.0% 2.3px,87.5% 1.4px,90.0% 5.0px,92.5% 5.0px,95.0% 4.2px,97.5% 3.5px,100.0% 1.6px,calc(100% - 0.4px) 12.5%,calc(100% - 0.5px) 25.0%,calc(100% - 0.1px) 37.5%,calc(100% - 1.2px) 50.0%,calc(100% - 0.6px) 62.5%,calc(100% - 1.4px) 75.0%,calc(100% - 0.6px) 87.5%,100.0% calc(100% - 4.8px),97.5% calc(100% - 4.2px),95.0% calc(100% - 0.0px),92.5% calc(100% - 1.0px),90.0% calc(100% - 4.6px),87.5% calc(100% - 2.3px),85.0% calc(100% - 4.9px),82.5% calc(100% - 2.0px),80.0% calc(100% - 0.4px),77.5% calc(100% - 3.1px),75.0% calc(100% - 3.9px),72.5% calc(100% - 1.3px),70.0% calc(100% - 0.4px),67.5% calc(100% - 1.7px),65.0% calc(100% - 4.8px),62.5% calc(100% - 3.8px),60.0% calc(100% - 0.6px),57.5% calc(100% - 1.2px),55.0% calc(100% - 0.5px),52.5% calc(100% - 0.3px),50.0% calc(100% - 4.0px),47.5% calc(100% - 0.9px),45.0% calc(100% - 2.8px),42.5% calc(100% - 2.2px),40.0% calc(100% - 1.0px),37.5% calc(100% - 3.7px),35.0% calc(100% - 0.7px),32.5% calc(100% - 3.2px),30.0% calc(100% - 0.6px),27.5% calc(100% - 2.1px),25.0% calc(100% - 1.1px),22.5% calc(100% - 1.3px),20.0% calc(100% - 4.9px),17.5% calc(100% - 4.0px),15.0% calc(100% - 1.5px),12.5% calc(100% - 4.4px),10.0% calc(100% - 1.1px),7.5% calc(100% - 2.0px),5.0% calc(100% - 4.3px),2.5% calc(100% - 3.2px),0.0% calc(100% - 0.5px),1.6px 87.5%,0.3px 75.0%,0.4px 62.5%,1.2px 50.0%,0.5px 37.5%,0.5px 25.0%,0.1px 12.5%);
+  --tape-edge: polygon(0 8%, 6% 0, 12% 10%, 18% 0, 24% 8%, 30% 0, 36% 9%, 42% 0, 48% 8%, 54% 0, 60% 10%, 66% 0, 72% 8%, 78% 0, 84% 9%, 90% 0, 96% 7%, 100% 0, 100% 100%, 94% 92%, 88% 100%, 82% 90%, 76% 100%, 70% 92%, 64% 100%, 58% 90%, 52% 100%, 46% 92%, 40% 100%, 34% 90%, 28% 100%, 22% 92%, 16% 100%, 10% 90%, 4% 100%, 0 92%);
+}
+
+@theme inline {
+  --color-*: initial;
+  --color-brand: var(--red);
+  --color-brand-deep: var(--red-deep);
+  --color-brand-wash: var(--red-wash);
+  --color-paper: var(--white);
+  --color-ink: var(--black);
+  --color-ink-soft: var(--black-soft);
+  --color-muted: var(--grey);
+  --color-strong: var(--rule-strong);
+  --color-line: var(--rule);
+  --color-wash: var(--wash);
+  --color-ground: var(--ground);
+  --color-snow: var(--snow);
+  --color-snow-muted: var(--snow-muted);
+  --color-snow-faint: var(--snow-faint);
+  --color-snow-line: var(--snow-line);
+  --color-snow-line-strong: var(--snow-line-strong);
+  --color-panel: var(--panel);
+  --color-pencil: var(--pencil);
+
+  --font-*: initial;
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-code);
+  --font-post: var(--font-x);
+
+  --radius-*: initial;
+  --radius-card: var(--radius);
+  --radius-object: var(--radius-lg);
+
+  --shadow-*: initial;
+  --shadow-object: var(--lift);
+}
+
+@layer base {
+  html {
+    background: var(--ground);
+    color: var(--snow);
+    font-family: var(--font-ui);
+    accent-color: var(--red);
+    caret-color: var(--red);
+    /* Scrollbars inside the text boxes, the claims and the overlay are drawn from the palette too. */
+    scrollbar-color: var(--rule-strong) transparent;
+  }
+
+  ::selection {
+    background: var(--red);
+    color: var(--white);
+  }
+
+  /* One focus ring: 3px red, always visible, on paper and on the ground. */
+  :focus-visible {
+    outline: 3px solid var(--red);
+    outline-offset: 2px;
+  }
+}
+
+/* Shared shapes. Flat inside the object: lines only. The object itself carries the only
+   shadow. Red means act or chosen; black means state. */
+@layer components {
+  .label {
+    @apply text-xs font-semibold text-muted;
+  }
+
+  .field {
+    @apply w-full rounded-card border border-strong bg-paper px-3 py-2.5 text-ink placeholder:text-muted hover:border-ink disabled:border-line disabled:bg-wash disabled:text-muted;
+  }
+
+  .btn {
+    @apply inline-flex cursor-pointer items-center justify-center rounded-card border border-strong bg-paper px-3.5 py-2 text-sm font-medium text-ink hover:border-ink active:bg-wash disabled:pointer-events-none disabled:border-line disabled:text-muted;
+  }
+
+  .btn-primary {
+    @apply border-brand bg-brand text-paper hover:border-brand-deep hover:bg-brand-deep active:border-brand-deep active:bg-brand-deep disabled:border-line disabled:bg-wash disabled:text-muted;
+  }
+
+  /* A focused field wears its ring on the edge, not floating off it. */
+  .field:focus-visible {
+    outline-offset: 0;
+  }
+
+  /* A select gets a drawn arrow in the palette instead of the browser's own. */
+  select.field {
+    appearance: none;
+    padding-right: 2.25rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.85rem center;
+    background-size: 0.7rem;
+  }
+
+  /* A compact select joined to something, like an account's pillar picker: its arrow tucked closer. */
+  select.field.tight {
+    padding: 0 1.5rem 0 0.625rem;
+    background-position: right 0.5rem center;
+    background-size: 0.55rem;
+  }
+
+  /* Solid black: the working button for upkeep. Solid red is kept for Generate and Open in X. */
+  .btn-dark {
+    @apply border-ink bg-ink text-paper hover:border-ink-soft hover:bg-ink-soft active:border-ink-soft active:bg-ink-soft disabled:border-line disabled:bg-wash disabled:text-muted;
+  }
+
+  /* A button on the dark ground, outside any sheet. */
+  .btn-ground {
+    @apply border-snow-line-strong bg-transparent text-snow hover:border-snow active:bg-panel disabled:border-snow-line disabled:bg-transparent disabled:text-snow-faint;
+  }
+
+  /* A text button for opening something in place. */
+  .link {
+    @apply cursor-pointer rounded-[4px] text-sm font-medium text-ink underline decoration-strong underline-offset-4 hover:decoration-ink;
+  }
+
+  /* A passing state, in solid black: over the limit, unverified, a rule broken. */
+  .tag {
+    @apply inline-flex items-center rounded-[6px] bg-ink px-1.5 py-0.5 text-xs font-semibold text-paper;
+  }
+
+  /* A decision, stamped on the draft like a coupon: outlined when rejected, solid when approved. */
+  .stamp {
+    @apply inline-flex items-center rounded-[4px] border-2 border-ink px-2 py-1 text-sm font-semibold text-ink;
+  }
+
+  .stamp-solid {
+    @apply bg-ink text-paper;
+  }
+
+  /* An underlined tab. It is a label around a radio input, so arrow keys move between tabs natively. */
+  .tab {
+    @apply -mb-px inline-flex min-h-10 cursor-pointer items-center gap-1.5 border-b-2 border-transparent px-2 text-sm font-semibold text-muted hover:text-ink has-[:checked]:border-brand has-[:checked]:text-brand has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand;
+  }
+
+  /* A draft's claims open over it, anchored above their button and growing left from its
+     right edge. Only the visible draft's button has a box, so one anchor name serves all.
+     Without anchor positioning the browser centres the list instead, which still works. */
+  .claims-anchor {
+    anchor-name: --claims;
+  }
+
+  .claims-pop {
+    position-anchor: --claims;
+    position-area: top span-left;
+    position-try-fallbacks: flip-block;
+    inset: auto;
+    margin: 0 0 0.5rem;
+    /* Flat like everything inside the object: an outline separates it, never a second shadow. */
+    @apply max-h-[50dvh] w-[min(28rem,calc(100vw-2rem))] overflow-y-auto rounded-card border border-strong bg-paper p-4 text-ink;
+  }
+
+  /* An overlay dims the page with warm black and a little blur. */
+  dialog::backdrop {
+    background: color-mix(in srgb, var(--ground) 60%, transparent);
+    backdrop-filter: blur(8px);
+  }
+
+  /* On a phone, everything you tap is at least 44px tall. */
+  @media (pointer: coarse), (max-width: 639px) {
+    .btn,
+    .pill,
+    .tab {
+      min-height: 2.75rem;
+    }
+
+    .link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 2.75rem;
+    }
+  }
+
+  .btn,
+  .field,
+  .pill,
+  .tab {
+    transition:
+      background-color 150ms ease-out,
+      border-color 150ms ease-out,
+      color 150ms ease-out;
+  }
+}
+
+/* A panel that opens in place settles with a short fade. It starts readable, so a
+   stalled animation can never leave it invisible. */
+@keyframes reveal {
+  from {
+    opacity: 0.4;
+    transform: translateY(-4px);
+  }
+}
+
+.reveal {
+  animation: reveal 150ms ease-out;
+}
+
+/* The mascot's eyes blink while a generation runs. */
+@keyframes blink {
+  0%,
+  86%,
+  100% {
+    transform: scaleY(1);
+  }
+  93% {
+    transform: scaleY(0.08);
+  }
+}
+
+.blink {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: blink 2.2s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blink,
+  .reveal {
+    animation: none;
+  }
+
+  .btn,
+  .field,
+  .pill,
+  .tab {
+    transition: none;
+  }
+}
+
+/* The One Flow scrapbook layer. A sheet is torn paper laid on the ground with a strip of
+   tape; its edge is a clip-path on a layer behind the content, so popovers and focus rings
+   are never clipped. Decoration only: nothing here changes what a control does. */
+.sheet {
+  position: relative;
+  isolation: isolate;
+  color: var(--black);
+  color-scheme: light; /* native checkboxes and date pickers drawn for paper */
+  filter: drop-shadow(0 14px 18px color-mix(in srgb, black 32%, transparent)) drop-shadow(0 2px 3px color-mix(in srgb, black 20%, transparent));
+  rotate: var(--r, 0deg);
+}
+
+.sheet::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--white);
+  clip-path: var(--torn, var(--torn-a));
+}
+
+.sheet-b {
+  --torn: var(--torn-b);
+}
+
+.sheet-c {
+  --torn: var(--torn-c);
+}
+
+.tape::before {
+  content: "";
+  position: absolute;
+  top: -11px;
+  left: calc(50% - 46px);
+  width: 92px;
+  height: 24px;
+  z-index: 2;
+  background: var(--tape);
+  rotate: -3deg;
+  clip-path: var(--tape-edge);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+/* Keys: down 1px on pointer-down, back up on the pop ease. Feedback on press, never on release. */
+.btn,
+.pill,
+[data-press] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn:active:not(:disabled),
+.pill:active,
+[data-press]:active {
+  translate: 0 1px;
+  scale: 0.98;
+  transition: translate var(--dur-press) ease-out, scale var(--dur-press) ease-out;
+}
+
+.btn,
+.pill,
+[data-press] {
+  transition:
+    translate var(--dur-release) var(--ease-pop),
+    scale var(--dur-release) var(--ease-pop),
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    color 150ms ease-out;
+}
+
+/* Arrival: a view's parts rise in reading order, 40ms apart, at most 8 steps. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+
+.rise > * {
+  animation: rise var(--dur-spring) var(--spring) backwards;
+  animation-delay: calc(min(var(--i, 0), 8) * var(--stagger));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise > *,
+  .sheet {
+    animation: none;
+    rotate: none;
+  }
+
+  .btn,
+  .pill,
+  [data-press] {
+    transition: none;
+  }
+}
+
+/* ---- Analogue touches (One Flow motion: keys travel and spring back, sheets carry their
+   weight, a stamp lands, a pencil draws). Transform and opacity only; all off under
+   reduced motion. ---- */
+
+/* A view settles into place each time it is shown (display:none to shown restarts these). */
+.view > * {
+  animation: rise var(--dur-spring) var(--spring) backwards;
+}
+.view > :nth-child(2) {
+  animation-delay: var(--stagger);
+}
+
+/* A dialog's sheet is laid down: it drops in a little tilted and settles flat. */
+@keyframes lay {
+  from {
+    opacity: 0;
+    translate: 0 28px;
+    rotate: -1.5deg;
+  }
+}
+dialog[open] > .sheet {
+  animation: lay var(--dur-spring) var(--spring);
+}
+
+/* A stamp lands: pressed in from above, a small bounce, then still. */
+@keyframes thunk {
+  0% {
+    opacity: 0;
+    scale: 1.7;
+    rotate: -9deg;
+  }
+  60% {
+    opacity: 1;
+  }
+}
+.stamp {
+  rotate: -3deg;
+  animation: thunk 0.42s var(--spring-bounce) backwards;
+}
+
+/* A figure rolls into place when it changes (keyed by its value). */
+@keyframes roll {
+  from {
+    opacity: 0;
+    translate: 0 0.5em;
+  }
+}
+.roll {
+  display: inline-block;
+  animation: roll var(--dur-quick) var(--spring) backwards;
+}
+
+/* A pencil line that draws itself under the view title. */
+.pencil-mark {
+  position: relative;
+  display: inline-block;
+}
+.pencil-mark svg {
+  position: absolute;
+  left: -3%;
+  bottom: -0.32em;
+  width: 106%;
+  height: 0.45em;
+  overflow: visible;
+  pointer-events: none;
+}
+.pencil-mark path {
+  fill: none;
+  stroke: var(--red);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-dasharray: 220;
+  stroke-dashoffset: 220;
+  animation: draw 0.9s var(--ease-out) 0.25s forwards;
+}
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* A segmented control: the carriage slides to its detent. */
+.segmented {
+  position: relative;
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  padding: 3px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--white);
+}
+.segmented > span[aria-hidden] {
+  position: absolute;
+  inset: 3px auto 3px 3px;
+  width: calc((100% - 6px) / var(--n, 2));
+  border-radius: 7px;
+  background: var(--black);
+  translate: calc(100% * var(--at, 0)) 0;
+  transition: translate var(--dur-quick) var(--spring);
+}
+.segmented button {
+  position: relative;
+  z-index: 1;
+  min-height: 2.25rem;
+  padding: 0 0.9rem;
+  border-radius: 7px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--grey);
+  cursor: pointer;
+  transition: color 150ms ease-out;
+}
+.segmented button[aria-pressed="true"] {
+  color: var(--white);
+}
+
+/* A card in hand: lifted, a deeper fall; it lands with a little bounce. */
+.in-hand {
+  scale: 1.05;
+  box-shadow: var(--lift);
+  transition: scale var(--dur-press) ease-out;
+}
+
+/* A drop target is outlined in pencil. */
+.drop-here {
+  outline: 2px dashed var(--red);
+  outline-offset: -4px;
+  border-radius: 8px;
+  background: var(--red-wash);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view > *,
+  dialog[open] > .sheet,
+  .stamp,
+  .roll,
+  .pencil-mark path {
+    animation: none;
+  }
+  .pencil-mark path {
+    stroke-dashoffset: 0;
+  }
+  .segmented > span[aria-hidden] {
+    transition: none;
+  }
+  .in-hand {
+    scale: 1;
+  }
+}

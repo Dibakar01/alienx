@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>alienX mascot candidates</title>
+  <!-- Tokens come from the app's stylesheet, so no colour is defined in this file. -->
+  <link rel="stylesheet" href="../app/globals.css">
+  <style>
+    body { margin: 0; padding: 48px; font: 12px/1.4 ui-monospace, monospace; color: var(--grey); }
+    h1 { margin: 0 0 4px; font-size: 14px; font-weight: 500; color: var(--black); }
+    p { margin: 0 0 16px; }
+    section + section { margin-top: 48px; }
+    .row { display: flex; align-items: flex-end; gap: 48px; padding: 32px; border: 1px solid var(--rule); }
+    .row + .row { border-top: 0; }
+    .on-red { background: var(--red); color: var(--white); }
+    .on-red figcaption { color: var(--white); }
+    .on-white { background: var(--white); color: var(--red); }
+    figure { display: grid; gap: 12px; justify-items: center; margin: 0; }
+    figcaption { color: var(--grey); }
+  </style>
+</head>
+<body>
+  <!-- Path data is copied from mascot-a.svg, mascot-b.svg and mascot-c.svg. Inline so currentColor applies. -->
+  <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+    <symbol id="a" viewBox="0 0 24 24">
+      <path fill="currentColor" fill-rule="evenodd" d="
+        M12 2C17.6 2 21 5.4 21 10C21 15.6 16.4 22 12 22C7.6 22 3 15.6 3 10C3 5.4 6.4 2 12 2Z
+        M5.2 9Q9.95 9.12 10.8 13.8Q6.05 13.68 5.2 9Z
+        M18.8 9Q14.05 9.12 13.2 13.8Q17.95 13.68 18.8 9Z"/>
+    </symbol>
+    <symbol id="b" viewBox="0 0 24 24">
+      <path fill="currentColor" fill-rule="evenodd" d="
+        M12 1.5C16.7 1.5 19.5 4.7 19.5 9.2C19.5 14.8 15.4 22.5 12 22.5C8.6 22.5 4.5 14.8 4.5 9.2C4.5 4.7 7.3 1.5 12 1.5Z
+        M6.6 7.2Q11.02 9.09 10.9 13.9Q6.48 12.01 6.6 7.2Z
+        M17.4 7.2Q12.98 9.09 13.1 13.9Q17.52 12.01 17.4 7.2Z"/>
+    </symbol>
+    <symbol id="c" viewBox="0 0 24 24">
+      <path fill="currentColor" fill-rule="evenodd" d="
+        M12 3.5C18.4 3.5 22 6.6 22 10.6C22 15.2 16.6 21 12 21C7.4 21 2 15.2 2 10.6C2 6.6 5.6 3.5 12 3.5Z
+        M4.2 9.4Q9.08 8.6 10.9 13.2Q6.02 14 4.2 9.4Z
+        M19.8 9.4Q14.92 8.6 13.1 13.2Q17.98 14 19.8 9.4Z"/>
+    </symbol>
+  </svg>
+
+  <section>
+    <h1>A</h1>
+    <p>Broad crown, medium taper. Eyes at 40 degrees.</p>
+    <div class="row on-red">
+      <figure><svg width="16" height="16"><use href="#a"/></svg><figcaption>16</figcaption></figure>
+      <figure><svg width="32" height="32"><use href="#a"/></svg><figcaption>32</figcaption></figure>
+      <figure><svg width="64" height="64"><use href="#a"/></svg><figcaption>64</figcaption></figure>
+      <figure><svg width="160" height="160"><use href="#a"/></svg><figcaption>160</figcaption></figure>
+    </div>
+    <div class="row on-white">
+      <figure><svg width="16" height="16"><use href="#a"/></svg><figcaption>16</figcaption></figure>
+      <figure><svg width="32" height="32"><use href="#a"/></svg><figcaption>32</figcaption></figure>
+      <figure><svg width="64" height="64"><use href="#a"/></svg><figcaption>64</figcaption></figure>
+      <figure><svg width="160" height="160"><use href="#a"/></svg><figcaption>160</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <h1>B</h1>
+    <p>Taller and narrower. Eyes at 57 degrees.</p>
+    <div class="row on-red">
+      <figure><svg width="16" height="16"><use href="#b"/></svg><figcaption>16</figcaption></figure>
+      <figure><svg width="32" height="32"><use href="#b"/></svg><figcaption>32</figcaption></figure>
+      <figure><svg width="64" height="64"><use href="#b"/></svg><figcaption>64</figcaption></figure>
+      <figure><svg width="160" height="160"><use href="#b"/></svg><figcaption>160</figcaption></figure>
+    </div>
+    <div class="row on-white">
+      <figure><svg width="16" height="16"><use href="#b"/></svg><figcaption>16</figcaption></figure>
+      <figure><svg width="32" height="32"><use href="#b"/></svg><figcaption>32</figcaption></figure>
+      <figure><svg width="64" height="64"><use href="#b"/></svg><figcaption>64</figcaption></figure>
+      <figure><svg width="160" height="160"><use href="#b"/></svg><figcaption>160</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <h1>C</h1>
+    <p>Wide and short. Eyes at 30 degrees.</p>
+    <div class="row on-red">
+      <figure><svg width="16" height="16"><use href="#c"/></svg><figcaption>16</figcaption></figure>
+      <figure><svg width="32" height="32"><use href="#c"/></svg><figcaption>32</figcaption></figure>
+      <figure><svg width="64" height="64"><use href="#c"/></svg><figcaption>64</figcaption></figure>
+      <figure><svg width="160" height="160"><use href="#c"/></svg><figcaption>160</figcaption></figure>
+    </div>
+    <div class="row on-white">
+      <figure><svg width="16" height="16"><use href="#c"/></svg><figcaption>16</figcaption></figure>
+      <figure><svg width="32" height="32"><use href="#c"/></svg><figcaption>32</figcaption></figure>
+      <figure><svg width="64" height="64"><use href="#c"/></svg><figcaption>64</figcaption></figure>
+      <figure><svg width="160" height="160"><use href="#c"/></svg><figcaption>160</figcaption></figure>
+    </div>
+  </section>
+</body>
+</html>
