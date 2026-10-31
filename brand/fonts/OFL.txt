@@ -1,0 +1,5 @@
+Outfit.ttf: the Outfit variable font (weights 100 to 900) by the Outfit Project Authors.
+Licensed under the SIL Open Font License, Version 1.1. https://openfontlicense.org
+Source: https://github.com/google/fonts/tree/main/ofl/outfit
+Copied from ~/Library/Fonts/Outfit.ttf. lib/art.ts embeds it in rendered art; the license
+allows embedding and redistribution with the font, but not selling the font by itself.

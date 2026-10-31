@@ -1,0 +1,25 @@
+{
+  "rules": [
+    "No em dashes.",
+    "No hashtags unless hashtags are allowed for this request.",
+    "No emoji unless the voice profile records the author using them.",
+    "No engagement bait such as \"Thoughts?\" or \"Agree?\".",
+    "No stock AI phrases such as \"Here's the thing\", \"Let that sink in\" or \"game-changer\".",
+    "No numbered thread markers such as \"1/\" or \"(2/5)\".",
+    "The first post of a thread must stand alone as a hook.",
+    "The first line is the hook: under about 80 characters, standing alone.",
+    "Short lines with a blank line between beats; no wall of text.",
+    "No links in the post; a source goes in the first reply."
+  ],
+  "banned_phrases": [
+    "Thoughts?",
+    "Agree?",
+    "Here's the thing",
+    "Let that sink in",
+    "game-changer",
+    "I've been thinking",
+    "Hot take",
+    "Unpopular opinion",
+    "A thread"
+  ]
+}

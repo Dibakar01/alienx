@@ -1,0 +1,11 @@
+{
+  "handle": "yourhandle",
+  "display_name": "Your Name",
+  "type": "personal",
+  "pillars": [
+    "Music",
+    "Culture"
+  ],
+  "source_url": "https://yourname.substack.com",
+  "x_samples": []
+}
