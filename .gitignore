@@ -1,0 +1,18 @@
+node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+.env*
+!.env.example
+data/
+
+# Session hand-off notes written by a Claude Code hook, not part of the product.
+docs/handoff/
+
+# Private: who the accounts are and what they have written. alienX reads these from disk;
+# copy the .example files to start. Never commit the real ones.
+corpus/
+voices/*.json
+knowledge/*.md
+!knowledge/*.example.md
+.impeccable/review/

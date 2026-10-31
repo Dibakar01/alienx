@@ -1,0 +1,37 @@
+{
+  "name": "alienx",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -H 127.0.0.1",
+    "build": "next build",
+    "start": "next start -H 127.0.0.1",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test",
+    "ingest": "node --env-file-if-exists=.env scripts/ingest.ts",
+    "profile": "node --env-file-if-exists=.env scripts/profile.ts",
+    "tick": "node --env-file-if-exists=.env scripts/tick.ts",
+    "plan": "node --env-file-if-exists=.env scripts/plan.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "cheerio": "^1.2.0",
+    "next": "^16.3.8",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "rss-parser": "^3.13.0",
+    "twitter-text": "^3.1.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/twitter-text": "^3.1.10",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2"
+  }
+}
