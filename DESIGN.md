@@ -229,6 +229,8 @@ Every colour is defined once in `app/globals.css`. Mixes are written there with 
 - **Pencil** (`--pencil`): hand marks, the resting mascot, the shimmer of working text. **Tape** (`--tape`): tape strips only.
 - Mixes on paper: `--grey` (secondary text), `--rule-strong` (outlines of things you can use), `--rule` (dividers), `--red-wash` (a chosen option; a drop target), `--red-deep` and `--black-soft` (pressed).
 
+**Light and dark.** Dark (the ground) is One Flow's default; light turns the ground into a darker paper (`--paper` mixed with 10% ink) and its ink to `--black`, with a white dock and a softer fall. The sheets are paper in both. With no choice saved it follows the system; the round switch in the top-right corner of every screen overrides it and is remembered on the device, applied before the first paint.
+
 **Red never warns.** Problems are ink tags. A due post is red because it needs you, not because something failed.
 
 ## Typography
@@ -268,6 +270,9 @@ Torn edges for sheets (`--torn-a`, `--torn-b`, `--torn-c`, from One Flow's scrap
 - **Buttons:** outline on paper (`.btn`), solid red for the one action (`.btn-primary`), solid ink for a working button (`.btn-dark`, Schedule, Save changes), outline on the ground (`.btn-ground`). Keys go down 1px on pointer-down and pop back on `--ease-pop`.
 - **Post card:** paper, 6px corners, a 1px rule (red when due), tilted by up to 0.8 degrees and straightened on hover. Image at 16:9, then the time or "Due now" with a red square, then two lines of the post. Dragged, it follows the pointer from where it was grabbed and tilts 2 degrees; dropped, it travels into its new cell on `--spring`; dropped nowhere, it springs home.
 - **Dock** (React Bits Dock, colours from the tokens): Studio, Write, Topics with drawn line icons, a red indicator under the current view, red badges for posts due and topics waiting.
+- **Theme switch:** a round outline key fixed in the top-right corner of every screen, a sun in the dark and a moon in the light. Headers keep 56px clear for it.
+- **Page turn:** changing view or profile is one View Transition: the old page slides 16px left and fades fast, the new one settles in from the right on the spring, while the dock and the theme switch stay put.
+- **Write, simplified:** inside a profile there is no account step; the thought, a Single post / Thread switch, topic chips (Any topic or a pillar) and Generate. Drafts open on their X preview; Schedule is the red action and Post now the quiet one.
 - **Toast:** dark panel above the dock, ten seconds, with Undo after a kill.
 - **Topic list** (React Bits AnimatedList, its demo data and icon library removed): each topic arrives on the list's spring.
 - **Working text** (React Bits ShinyText through `Shiny`): a pencil-to-ink shimmer on lines like "Drawing the hook." Plain text under reduced motion.

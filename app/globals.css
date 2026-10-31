@@ -65,6 +65,25 @@
   --tape-edge: polygon(0 8%, 6% 0, 12% 10%, 18% 0, 24% 8%, 30% 0, 36% 9%, 42% 0, 48% 8%, 54% 0, 60% 10%, 66% 0, 72% 8%, 78% 0, 84% 9%, 90% 0, 96% 7%, 100% 0, 100% 100%, 94% 92%, 88% 100%, 82% 90%, 76% 100%, 70% 92%, 64% 100%, 58% 90%, 52% 100%, 46% 92%, 40% 100%, 34% 90%, 28% 100%, 22% 92%, 16% 100%, 10% 90%, 4% 100%, 0 92%);
 }
 
+/* Light: the ground becomes paper and its ink turns dark. The sheets are paper in both themes.
+   With no choice saved it follows the system; the toggle sets data-theme on <html>. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --ground: color-mix(in srgb, var(--paper) 90%, var(--black)); /* a darker paper, so the sheets still lift off it */
+  --snow: var(--black); /* ink on the ground */
+  --panel: var(--white);
+  --lift: 0 10px 16px color-mix(in srgb, black 16%, transparent), 0 2px 3px color-mix(in srgb, black 12%, transparent);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+  color-scheme: light;
+  --ground: color-mix(in srgb, var(--paper) 90%, var(--black)); /* a darker paper, so the sheets still lift off it */
+  --snow: var(--black); /* ink on the ground */
+  --panel: var(--white);
+  --lift: 0 10px 16px color-mix(in srgb, black 16%, transparent), 0 2px 3px color-mix(in srgb, black 12%, transparent);
+  }
+}
+
 @theme inline {
   --color-*: initial;
   --color-brand: var(--red);
@@ -392,12 +411,26 @@
    weight, a stamp lands, a pencil draws). Transform and opacity only; all off under
    reduced motion. ---- */
 
-/* A view settles into place each time it is shown (display:none to shown restarts these). */
-.view > * {
-  animation: rise var(--dur-spring) var(--spring) backwards;
+/* Turning the page: a change of view or profile is one View Transition. The old page slides
+   a little left and fades fast; the new one settles in from the right on the spring. The
+   theme switch and the dock keep their place. */
+::view-transition-old(root) {
+  animation: var(--dur-exit) var(--ease-in) both page-out;
 }
-.view > :nth-child(2) {
-  animation-delay: var(--stagger);
+::view-transition-new(root) {
+  animation: var(--dur-spring) var(--spring) both page-in;
+}
+@keyframes page-out {
+  to {
+    opacity: 0;
+    translate: -16px 0;
+  }
+}
+@keyframes page-in {
+  from {
+    opacity: 0;
+    translate: 20px 0;
+  }
 }
 
 /* A dialog's sheet is laid down: it drops in a little tilted and settles flat. */
@@ -521,7 +554,8 @@ dialog[open] > .sheet {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .view > *,
+  ::view-transition-old(root),
+  ::view-transition-new(root),
   dialog[open] > .sheet,
   .stamp,
   .roll,

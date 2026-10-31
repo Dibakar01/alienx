@@ -4,6 +4,18 @@ alienX runs a small team's X presence with the founders as editors. Each week it
 
 It is built for [Qalakaar](https://qalakaar.com) and its three accounts, and it runs on one Mac at no cost: model calls go through the Claude Code CLI on a Claude subscription, never a paid API.
 
+## Start in one line
+
+On a Mac with [Node 24+](https://nodejs.org), [Google Chrome](https://www.google.com/chrome) and the [Claude Code CLI](https://claude.com/claude-code) (signed in with your Claude plan):
+
+```bash
+git clone https://github.com/Dibakar01/alienx.git && cd alienx && npm run setup && npm run local
+```
+
+`npm run setup` checks those three, installs packages, and creates your private settings from templates. It never overwrites a file you already have. `npm run local` builds alienX, starts it on this Mac only (http://127.0.0.1:3000) and opens it in your browser; Ctrl+C stops it. The first screen walks you through adding your accounts. Fill in `knowledge/qalakaar-facts.md` with your company's facts: alienX states nothing about the company beyond that file.
+
+In Safari, File > Add to Dock turns it into an app with its own window. Light and dark follow your system, and the switch in the top-right corner overrides that.
+
 ## How it works
 
 - **Voices.** `npm run ingest` pulls an account's own essays (`corpus/`), and `npm run profile` studies them into a voice profile (`voices/<handle>.json`). Pasted past X posts sharpen a profile.
@@ -18,30 +30,21 @@ It is built for [Qalakaar](https://qalakaar.com) and its three accounts, and it 
 
 ## Private data stays out of git
 
-The voices, the essays they are built from, the company facts, the database and the generated images are private. They live on disk and are git-ignored: `voices/*.json`, `corpus/`, `knowledge/*.md`, `data/` and `.env`. To start, copy the templates:
+The voices, the essays they are built from, the company facts, the database and the generated images are private. They live on disk and are git-ignored: `voices/*.json`, `corpus/`, `knowledge/*.md`, `data/` and every `.env` file. `npm run setup` creates them from the templates (`.env.example`, `knowledge/qalakaar-facts.example.md`), and accounts are added from the app. Tests that need the private files skip themselves when the files are absent.
+
+## Other ways to run it
 
 ```bash
-cp .env.example .env
-cp knowledge/qalakaar-facts.example.md knowledge/qalakaar-facts.md
-cp voices/account.json.example voices/yourhandle.json
-```
-
-Tests that need the private files skip themselves when the files are absent.
-
-## Run it
-
-Requirements: macOS, Node 26, Google Chrome (for the images), and the Claude Code CLI signed in to a Claude subscription.
-
-```bash
-npm install
-npm run dev        # http://127.0.0.1:3000
+npm run dev        # development, with live reload, http://127.0.0.1:3000
 npm test
 npm run typecheck
 ```
 
-To run it in the background (the server, the one-minute clock and the Sunday research), use `scripts/agents.sh`. It installs three launchd agents for your user; `scripts/agents.sh remove` uninstalls them.
+To keep it running in the background (the server, the one-minute clock that marks posts due, and the Sunday research), run `scripts/agents.sh`. It installs three launchd agents for your user; `scripts/agents.sh remove` uninstalls them. Without them, the clock and the weekly research only run while `npm run local` is open, or when you run `npm run tick` and `npm run plan` yourself.
 
-## Put it online
+## Put it online (optional)
+
+Only needed to use alienX from a phone or another computer. It stays on the Mac.
 
 alienX stays on the Mac and is published through a Cloudflare Tunnel, with Cloudflare Access (an emailed one-time PIN to an allow-list) as the only login.
 

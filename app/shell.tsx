@@ -4,11 +4,13 @@
 // each view fits the window. Views stay mounted, so drafts in progress survive a switch.
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import type { Finding, Post, Topic } from "../lib/db.ts";
 import type { AccountInfo } from "./accounts.tsx";
 import Dock from "./bits/Dock.tsx";
 import { Mascot } from "./mascot.tsx";
 import { Profiles } from "./profiles.tsx";
+import { ThemeIcon, useTheme } from "./theme.tsx";
 import { Studio } from "./studio.tsx";
 import { Topics } from "./topics.tsx";
 import { Week } from "./week.tsx";
@@ -33,6 +35,14 @@ const ICONS: Record<View, React.ReactNode> = {
 };
 const LABELS: Record<View, string> = { week: "Studio", write: "Write", topics: "Topics" };
 
+// One page, turning: when the browser can, a change of view or profile is a View Transition
+// (the old page slides out, the new one settles in on the spring); otherwise it just changes.
+function turn(change: () => void) {
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!document.startViewTransition || reduce) return change();
+  document.startViewTransition(() => flushSync(change));
+}
+
 export function Shell({
   accounts,
   posts,
@@ -50,6 +60,7 @@ export function Shell({
   // Who is posting: one handle, "all", or nobody yet (the chooser shows). Each device remembers its own.
   const [profile, setProfile] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [theme, flipTheme] = useTheme();
   const router = useRouter();
   const ordered = [...accounts].sort((a, b) => (ORDER.indexOf(a.handle) + 1 || 99) - (ORDER.indexOf(b.handle) + 1 || 99));
 
@@ -68,7 +79,7 @@ export function Shell({
   }, []);
 
   const pick = (who: string | null) => {
-    setProfile(who);
+    turn(() => setProfile(who));
     try {
       if (who) localStorage.setItem(PROFILE, who);
       else localStorage.removeItem(PROFILE);
@@ -84,13 +95,29 @@ export function Shell({
   }, [router]);
 
   const go = (v: View) => {
-    setView(v);
+    if (v === view) return;
+    turn(() => setView(v));
     try {
       localStorage.setItem(STORE, v);
     } catch {
       // Nothing to remember it in.
     }
   };
+
+  // The corner switch, the same place on every screen.
+  const themeSwitch = (
+    <button
+      type="button"
+      data-press
+      onClick={flipTheme}
+      aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+      title={theme === "dark" ? "Light mode" : "Dark mode"}
+      style={{ viewTransitionName: "theme" }}
+      className="btn btn-ground fixed top-2 right-2 z-30 size-11 rounded-full p-0 sm:top-3 sm:right-3 lg:top-5 lg:right-8"
+    >
+      <ThemeIcon theme={theme} className="size-5" />
+    </button>
+  );
 
   // Until the device's choice is read, show nothing rather than flash the wrong screen.
   if (!ready) return <div className="h-dvh" />;
@@ -99,6 +126,7 @@ export function Shell({
       <div className="h-dvh overflow-hidden">
         <h1 className="sr-only">alienX</h1>
         <Profiles accounts={ordered} posts={posts} onPick={pick} />
+        {themeSwitch}
       </div>
     );
 
@@ -113,7 +141,7 @@ export function Shell({
 
   return (
     <div className="relative h-dvh overflow-hidden">
-      <h1 className="sr-only">alienX{me ? `, ${me.name}` : ", all three"}</h1>
+      <h1 className="sr-only">alienX{me ? `, ${me.name}` : ", all accounts"}</h1>
       {/* Keyed by profile, so switching starts each view fresh for that account. */}
       <div hidden={view !== "week"} className="view h-full">
         <Week key={profile} accounts={mine} posts={myPosts} sources={sources} now={now} />
@@ -126,6 +154,7 @@ export function Shell({
       </div>
       <nav aria-label="Views">
         <Dock
+          style={{ viewTransitionName: "dock" }}
           baseItemSize={46}
           magnification={62}
           panelHeight={62}
@@ -145,12 +174,13 @@ export function Shell({
               ) : (
                 <span className="text-[0.5em] font-bold">All</span>
               ),
-              label: `${me ? me.name : "All three"}: switch profile`,
+              label: `${me ? me.name : "All accounts"}: switch profile`,
               onClick: () => pick(null),
             },
           ]}
         />
       </nav>
+      {themeSwitch}
     </div>
   );
 }

@@ -218,8 +218,8 @@ export function PostDetail({
             <details className="text-sm">
               <summary className="cursor-pointer font-semibold">{sources.length === 1 ? "1 source" : `${sources.length} sources`} from the research</summary>
               <ul className="mt-2 grid gap-1.5">
-                {sources.map((s) => (
-                  <li key={s.url}>
+                {sources.map((s, k) => (
+                  <li key={`${k}:${s.url}`}>
                     <a href={/^https?:\/\//i.test(s.url) ? s.url : undefined} target="_blank" rel="noreferrer" className="link">
                       {s.title}
                     </a>

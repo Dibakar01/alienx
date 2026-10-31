@@ -35,7 +35,8 @@ export function Studio({ accounts, onOpenStudio }: { accounts: AccountInfo[]; on
   const [format, setFormat] = useState<Format>("single");
   // The pillar picked for each account. None means any of that account's own pillars.
   const [pillarOf, setPillarOf] = useState<Record<string, string>>({});
-  const [hashtags, setHashtags] = useState(false);
+  // X posts carry no hashtags (alienX's X rules), so the request always says so.
+  const hashtags = false;
   // Drafts, errors and running generations are kept per account.
   const [sets, setSets] = useState<Record<string, DraftSet>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -79,6 +80,10 @@ export function Studio({ accounts, onOpenStudio }: { accounts: AccountInfo[]; on
   const picked = (h: string) => Boolean(sets[h]?.drafts.some((d) => statusOf(d) === "approved"));
   // The step to do now: choose who is posting, then say the thought, then pick a draft.
   const current = !picking.length ? 1 : working || repeat ? 3 : 2;
+  // Inside one profile the account is already chosen: the "who" step disappears and the
+  // steps are numbered from the thought.
+  const solo = accounts.length === 1;
+  const step = (n: number) => (solo ? n - 1 : n);
   const hint = working
     ? "About half a minute."
     : !picking.length
@@ -142,19 +147,18 @@ export function Studio({ accounts, onOpenStudio }: { accounts: AccountInfo[]; on
 
   return (
     <div className="grid h-full grid-rows-[auto_1fr_auto] p-2 pb-24 sm:p-3 sm:pb-24 lg:gap-y-4 lg:px-8 lg:pt-5">
-      <header className="row-start-1 flex items-center gap-4 max-lg:hidden">
+      <header className="row-start-1 flex items-center gap-4 pr-14 max-lg:pb-2">
         <Mascot blink={working} className="size-8 text-brand" />
         <div>
-          <ViewTitle name="Write" who={accounts.length === 1 ? accounts[0]!.name : "all three"} />
-          <p className="text-sm text-snow-muted">A thought becomes five drafts per account. Schedule the one worth posting.</p>
+          <ViewTitle name="Write" who={accounts.length === 1 ? accounts[0]!.name : accounts.length === 3 ? "all three" : "all accounts"} />
+          <p className="text-sm text-snow-muted max-sm:hidden">A thought becomes five drafts. Schedule the one worth posting.</p>
         </div>
       </header>
 
       <main className="sheet tape row-start-2 grid min-h-0 w-full max-w-6xl grid-rows-[auto_1fr] justify-self-center lg:h-full lg:max-h-[46rem] lg:grid-cols-2 lg:grid-rows-1 lg:self-center">
         {/* Phone only: the mark and the switch between the two faces. */}
         <div className="flex items-center gap-3 border-b border-line px-3 py-2 lg:hidden">
-          <Mascot blink={working} className="size-7 text-brand" />
-          <div role="group" aria-label="Face" className="ml-auto flex gap-1">
+          <div role="group" aria-label="Face" className="mx-auto flex gap-1">
             {(["thought", "post"] as const).map((f) => (
               <button
                 key={f}
@@ -170,12 +174,14 @@ export function Studio({ accounts, onOpenStudio }: { accounts: AccountInfo[]; on
         </div>
 
         <section aria-label="The thought" className={`flex min-h-0 flex-col gap-3 p-4 lg:p-6 ${face === "post" ? "max-lg:hidden" : ""}`}>
-          <Head n={1} current={current} title="Who is posting">
+          {!solo && (
+          <Head n={1} shown={step(1)} current={current} title="Who is posting">
             <button type="button" className="link" onClick={() => openUpkeep("posts", picking[0] ?? upkeep.who)}>
               Accounts
             </button>
           </Head>
-          <div role="group" aria-labelledby="step-1" className="flex flex-wrap gap-2">
+          )}
+          <div role="group" aria-labelledby="step-1" className={`flex flex-wrap gap-2 ${solo ? "hidden" : ""}`}>
             {accounts.map((a) => {
               const on = picking.includes(a.handle);
               // A chosen account carries its own pillar picker, joined to its switch.
@@ -211,13 +217,19 @@ export function Studio({ accounts, onOpenStudio }: { accounts: AccountInfo[]; on
           </div>
 
           <form
-            className="mt-4 flex min-h-0 flex-1 flex-col gap-3"
+            className={`flex min-h-0 flex-1 flex-col gap-3 ${solo ? "" : "mt-4"}`}
             onSubmit={(e) => {
               e.preventDefault();
               run();
             }}
           >
-            <Head n={2} current={current} title="Your thought" />
+            <Head n={2} shown={step(2)} current={current} title="Your thought">
+              {solo && (
+                <button type="button" className="link" onClick={() => openUpkeep("posts", accounts[0]!.handle)}>
+                  Teach the voice
+                </button>
+              )}
+            </Head>
             <textarea
               ref={thought}
               id="thought"
@@ -234,27 +246,39 @@ export function Studio({ accounts, onOpenStudio }: { accounts: AccountInfo[]; on
                   run();
                 }
               }}
-              placeholder="A raw thought, a note, a link."
+              placeholder="What's on your mind? A thought, something you noticed, a link."
               maxLength={4000}
               className="field min-h-20 flex-1 resize-none"
             />
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <fieldset className="flex min-w-0 gap-2">
-                <legend className="sr-only">Format</legend>
-                {(["single", "thread"] as const).map((f) => (
-                  <label
-                    key={f}
-                    className={`pill inline-flex min-h-10 cursor-pointer items-center rounded-card border px-3 text-sm has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand ${format === f ? "border-brand bg-brand-wash font-medium text-brand" : "border-strong hover:border-ink active:bg-wash"}`}
-                  >
-                    <input type="radio" name="format" value={f} checked={format === f} onChange={() => setFormat(f)} className="sr-only" />
-                    {f === "single" ? "Single post" : "Thread"}
-                  </label>
-                ))}
-              </fieldset>
-              <label className="flex min-h-10 cursor-pointer items-center gap-2 text-sm">
-                <input type="checkbox" checked={hashtags} onChange={(e) => setHashtags(e.target.checked)} className="size-4" />
-                Hashtags
-              </label>
+              <span className="segmented" style={{ "--at": format === "single" ? 0 : 1 } as React.CSSProperties} role="group" aria-label="Format">
+                <span aria-hidden="true" />
+                <button type="button" aria-pressed={format === "single"} onClick={() => setFormat("single")}>
+                  Single post
+                </button>
+                <button type="button" aria-pressed={format === "thread"} onClick={() => setFormat("thread")}>
+                  Thread
+                </button>
+              </span>
+              {/* One profile: what it is about, as chips. Any lets the drafts pick the pillar that fits. */}
+              {solo && accounts[0]!.pillars.length > 0 && (
+                <span className="flex flex-wrap gap-1.5" role="group" aria-label="About">
+                  {["", ...accounts[0]!.pillars].map((p) => {
+                    const on = (pillarOf[accounts[0]!.handle] ?? "") === p;
+                    return (
+                      <button
+                        key={p || "any"}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => setPillarOf((x) => ({ ...x, [accounts[0]!.handle]: p }))}
+                        className={`pill min-h-9 rounded-[6px] border px-2.5 text-sm ${on ? "border-ink bg-ink text-paper" : "border-line text-muted hover:border-strong hover:text-ink"}`}
+                      >
+                        {p || "Any topic"}
+                      </button>
+                    );
+                  })}
+                </span>
+              )}
             </div>
             {/* Red from the first moment: this is the one action. Pressed too early, it says what is missing. */}
             <button type="submit" className={`btn mt-1 py-3.5 text-base ${repeat ? "" : "btn-primary"}`} disabled={working}>
@@ -267,7 +291,7 @@ export function Studio({ accounts, onOpenStudio }: { accounts: AccountInfo[]; on
         </section>
 
         <section aria-label="The post" className={`flex min-h-0 flex-col gap-3 p-4 lg:border-l lg:border-line lg:p-6 ${face === "thought" ? "max-lg:hidden" : ""}`}>
-          <Head n={3} current={current} title="Pick one">
+          <Head n={3} shown={step(3)} current={current} title="Pick one">
             {/* On a phone the chosen author tab right below already names the account. */}
             {viewSet && <p className="min-w-0 truncate text-sm text-muted max-sm:hidden">Approve or reject to teach @{view}.</p>}
           </Head>
@@ -364,13 +388,13 @@ export function Studio({ accounts, onOpenStudio }: { accounts: AccountInfo[]; on
 
 // A step's heading, signed like a wayfinding panel: the step to do now is red,
 // finished steps are black, and the ones still ahead are grey.
-function Head({ n, current, title, children }: { n: number; current: number; title: string; children?: React.ReactNode }) {
+function Head({ n, shown = n, current, title, children }: { n: number; shown?: number; current: number; title: string; children?: React.ReactNode }) {
   const tone = n === current ? "text-brand" : n < current ? "text-ink" : "text-strong";
   return (
     <div className="flex items-baseline justify-between gap-x-4">
       <h2 id={`step-${n}`} aria-current={n === current ? "step" : undefined} className="flex shrink-0 items-baseline gap-2.5 text-lg leading-tight font-medium">
         <span aria-hidden="true" className={`font-mono transition-colors duration-150 motion-reduce:transition-none ${tone}`}>
-          {n}
+          {shown}
         </span>
         {title}
       </h2>
@@ -409,7 +433,7 @@ function Card({
   onDecided: (status: Status) => void;
 }) {
   // Edit the words, or see them as the feed will show them.
-  const [mode, setMode] = useState<"edit" | "preview">("edit");
+  const [mode, setMode] = useState<"edit" | "preview">("preview");
   const [posts, setPosts] = useState(draft.posts);
   // A thread shows one post at a time.
   const [page, setPage] = useState(0);
@@ -425,7 +449,6 @@ function Card({
   const long = posts.findIndex((p) => weighted(p) > LIMIT);
   const unverified = draft.claims.filter((c) => c.source === "unverified").length;
   // Solid red marks the draft to post: every draft until one is approved, then only that one.
-  const lead = status !== "rejected" && (!picked || status === "approved");
   const id = `post-${draft.id}`;
 
   // The scheduled post this draft became, so Undo can take it off the schedule again.
@@ -465,13 +488,13 @@ function Card({
     <article hidden={hidden} aria-label={`${draft.angle}: ${ANGLES[draft.angle]}`} className="flex min-h-0 flex-1 flex-col gap-3 pt-1">
       <div className="flex items-center justify-between gap-3">
         <span className="label">{single ? ANGLES[draft.angle] : `Post ${page + 1} of ${posts.length}`}</span>
-        <span className="segmented" style={{ "--at": mode === "edit" ? 0 : 1 } as React.CSSProperties} role="group" aria-label="Show">
+        <span className="segmented" style={{ "--at": mode === "preview" ? 0 : 1 } as React.CSSProperties} role="group" aria-label="Show">
           <span aria-hidden="true" />
-          <button type="button" aria-pressed={mode === "edit"} onClick={() => setMode("edit")}>
-            Edit
-          </button>
           <button type="button" aria-pressed={mode === "preview"} onClick={() => setMode("preview")}>
             On X
+          </button>
+          <button type="button" aria-pressed={mode === "edit"} onClick={() => setMode("edit")}>
+            Edit
           </button>
         </span>
       </div>
@@ -599,7 +622,7 @@ function Card({
           </form>
         ) : (
           <>
-            <button type="button" className="btn btn-dark" disabled={busy || long >= 0} onClick={schedule}>
+            <button type="button" className="btn btn-primary" disabled={busy || long >= 0} onClick={schedule}>
               Schedule
             </button>
             <button type="button" className="btn" disabled={busy} onClick={() => setRejecting(true)}>
@@ -613,11 +636,11 @@ function Card({
             {count > LIMIT ? (
               // X would refuse it. The note above says what to do.
               <button type="button" className="btn" disabled>
-                Open in X
+                Post now
               </button>
             ) : (
-              <a className={`btn ${lead ? "btn-primary" : ""}`} href={`https://x.com/intent/post?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer">
-                Open in X
+              <a className="btn" href={`https://x.com/intent/post?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer">
+                Post now
               </a>
             )}
           </span>

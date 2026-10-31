@@ -12,7 +12,9 @@
     "ingest": "node --env-file-if-exists=.env scripts/ingest.ts",
     "profile": "node --env-file-if-exists=.env scripts/profile.ts",
     "tick": "node --env-file-if-exists=.env scripts/tick.ts",
-    "plan": "node --env-file-if-exists=.env scripts/plan.ts"
+    "plan": "node --env-file-if-exists=.env scripts/plan.ts",
+    "setup": "bash scripts/setup.sh",
+    "local": "bash scripts/local.sh"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

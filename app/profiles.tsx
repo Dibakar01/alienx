@@ -2,20 +2,58 @@
 
 // The first screen after the Cloudflare login: who is posting. One torn sheet per account,
 // with what needs it; "All three" opens the combined week. Profiles are a view, not a
-// permission: the one login covers everyone.
+// permission: the one login covers everyone. With no accounts yet (a fresh clone), it
+// offers to add the first one.
+import { useRef, useState } from "react";
 import type { Post } from "../lib/db.ts";
-import type { AccountInfo } from "./accounts.tsx";
+import { type AccountInfo, Accounts, type Upkeep } from "./accounts.tsx";
 import { Mascot } from "./mascot.tsx";
 
-export function Profiles({ accounts, posts, onPick }: { accounts: AccountInfo[]; posts: Post[]; onPick: (handle: string) => void }) {
+export function Profiles({
+  accounts,
+  posts,
+  onPick,
+}: {
+  accounts: AccountInfo[];
+  posts: Post[];
+  onPick: (handle: string) => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [upkeep, setUpkeep] = useState<Upkeep>({ mode: "add", who: accounts[0]?.handle ?? "" });
+  const add = () => {
+    setUpkeep((u) => ({ ...u, mode: "add" }));
+    dialog.current?.showModal();
+  };
+  const accountsDialog = (
+    <Accounts ref={dialog} accounts={accounts} upkeep={upkeep} onChange={setUpkeep} onAdded={() => dialog.current?.close()} />
+  );
+
+  if (accounts.length === 0)
+    return (
+      <div className="grid h-full place-items-center p-4">
+        <div className="sheet tape grid max-w-md justify-items-center gap-4 px-8 pt-10 pb-8 text-center">
+          <Mascot className="size-14 text-brand" />
+          <h2 className="text-2xl font-bold tracking-[-0.03em]">Welcome to alienX</h2>
+          <p className="text-sm text-muted">
+            Add the X accounts alienX writes for. For each one, give it the account&apos;s own public writing (a Substack or blog link) or paste past posts, and it learns the voice. It takes a minute or two.
+          </p>
+          <button type="button" className="btn btn-primary px-5 py-3 text-base" onClick={add}>
+            Add your first account
+          </button>
+        </div>
+        {accountsDialog}
+      </div>
+    );
+
   return (
     <div className="grid h-full grid-rows-[auto_1fr_auto] gap-6 p-4 sm:p-8">
-      <header className="flex items-center gap-4">
+      <header className="flex items-center gap-4 pr-14">
         <Mascot className="size-9 text-brand" />
         <div>
           <h2 className="text-2xl leading-tight font-bold tracking-[-0.03em]">Who is posting?</h2>
           <p className="text-sm text-snow-muted">Pick a profile. You can switch any time from the dock.</p>
         </div>
+
       </header>
 
       <main className="rise grid content-center gap-6 sm:grid-cols-3 lg:mx-auto lg:w-full lg:max-w-5xl">
@@ -45,11 +83,17 @@ export function Profiles({ accounts, posts, onPick }: { accounts: AccountInfo[];
         })}
       </main>
 
-      <footer className="flex justify-center">
-        <button type="button" className="btn btn-ground" onClick={() => onPick("all")}>
-          All three
+      <footer className="flex flex-wrap items-center justify-center gap-3">
+        {accounts.length > 1 && (
+          <button type="button" className="btn btn-ground" onClick={() => onPick("all")}>
+            {accounts.length === 3 ? "All three" : `All ${accounts.length}`}
+          </button>
+        )}
+        <button type="button" className="link text-snow decoration-snow-line-strong" onClick={add}>
+          Add an account
         </button>
       </footer>
+      {accountsDialog}
     </div>
   );
 }

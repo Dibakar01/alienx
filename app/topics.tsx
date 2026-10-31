@@ -32,33 +32,39 @@ export function Topics({ accounts, topics }: { accounts: AccountInfo[]; topics: 
     router.refresh();
   };
 
+  // "Find topics" runs this week's research now. It sits in the middle of the view, where the topics land.
+  const find = (primary: boolean) => (
+    <div className="grid justify-items-center gap-2">
+      <div className="flex flex-wrap justify-center gap-2" role="group" aria-label="Find topics now">
+        {accounts
+          .filter((a) => a.ready)
+          .map((a) => {
+            const key = `r:${a.handle}`;
+            return (
+              <button key={a.handle} type="button" className={`btn ${primary ? "btn-primary px-5 py-3 text-base" : ""}`} disabled={busy[key]} onClick={() => run(key, { research: a.handle })}>
+                {busy[key] ? <Shiny text={`Researching @${a.handle}. A few minutes.`} /> : accounts.length === 1 ? "Find topics" : `Find topics for @${a.handle}`}
+              </button>
+            );
+          })}
+      </div>
+      {accounts
+        .filter((a) => errors[`r:${a.handle}`])
+        .map((a) => (
+          <p key={a.handle} role="alert" className="text-sm font-semibold">
+            Signal lost. @{a.handle}: {errors[`r:${a.handle}`]}
+          </p>
+        ))}
+    </div>
+  );
+
   return (
     <div className="grid h-full grid-rows-[auto_1fr] gap-3 p-2 pb-24 sm:p-3 sm:pb-24 lg:gap-4 lg:px-8 lg:pt-5">
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 pr-14">
         <Mascot blink={Object.values(busy).some(Boolean)} className="size-8 text-brand" />
         <div className="min-w-0">
-          <ViewTitle name="Topics" who={accounts.length === 1 ? accounts[0]!.name : "all three"} />
+          <ViewTitle name="Topics" who={accounts.length === 1 ? accounts[0]!.name : accounts.length === 3 ? "all three" : "all accounts"} />
           <p className="text-sm text-snow-muted">Every Sunday at 8 pm alienX looks for what is trending in each account's world this fortnight and proposes topics with a takeaway. Draft the ones worth saying.</p>
         </div>
-        <div className="ml-auto flex flex-wrap gap-2" role="group" aria-label="Research now">
-          {accounts
-            .filter((a) => a.ready)
-            .map((a) => {
-              const key = `r:${a.handle}`;
-              return (
-                <button key={a.handle} type="button" className="btn btn-ground" disabled={busy[key]} onClick={() => run(key, { research: a.handle })} title={errors[key] || undefined}>
-                  {busy[key] ? <Shiny text={`Researching @${a.handle}`} className="text-snow" /> : errors[key] ? `@${a.handle}: try again` : `Find topics for @${a.handle}`}
-                </button>
-              );
-            })}
-        </div>
-        {accounts
-          .filter((a) => errors[`r:${a.handle}`])
-          .map((a) => (
-            <p key={a.handle} role="alert" className="basis-full text-sm font-semibold text-snow">
-              Signal lost. @{a.handle}: {errors[`r:${a.handle}`]}
-            </p>
-          ))}
       </header>
 
       <main className="min-h-0 lg:mx-auto lg:w-full lg:max-w-4xl">
@@ -67,10 +73,13 @@ export function Topics({ accounts, topics }: { accounts: AccountInfo[]; topics: 
             <div className="sheet sheet-b tape grid max-w-md justify-items-center gap-3 px-8 py-7 text-center">
               <Mascot className="size-12 text-pencil" />
               <p className="font-semibold">No topics waiting.</p>
-              <p className="text-sm text-muted">The next research run is Sunday at 8 pm. Find topics for an account above to run it now; it takes a few minutes.</p>
+              <p className="text-sm text-muted">The next research run is Sunday at 8 pm. Or look now: it takes a few minutes.</p>
+              <div className="pt-2">{find(true)}</div>
             </div>
           </div>
         ) : (
+          <div className="grid h-full grid-rows-[auto_minmax(0,1fr)] gap-3">
+            <div className="sheet sheet-c justify-self-center px-4 py-3">{find(false)}</div>
           <AnimatedList
             items={topics.map((t) => ({ id: t.id, title: t.title }))}
             width="100%"
@@ -100,8 +109,8 @@ export function Topics({ accounts, topics }: { accounts: AccountInfo[]; topics: 
                   )}
                   {t.findings.length > 0 && (
                     <ul className="grid gap-1 text-sm">
-                      {t.findings.map((f) => (
-                        <li key={f.url} className="min-w-0 truncate">
+                      {t.findings.map((f, k) => (
+                        <li key={`${k}:${f.url}`} className="min-w-0 truncate">
                           <a href={/^https?:\/\//i.test(f.url) ? f.url : undefined} target="_blank" rel="noreferrer" className="link" onClick={(e) => e.stopPropagation()}>
                             {f.title}
                           </a>
@@ -132,6 +141,7 @@ export function Topics({ accounts, topics }: { accounts: AccountInfo[]; topics: 
               );
             }}
           />
+          </div>
         )}
       </main>
     </div>

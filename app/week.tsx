@@ -91,10 +91,10 @@ export function Week({ accounts, posts, sources, now }: { accounts: AccountInfo[
 
   return (
     <div className="grid h-full grid-rows-[auto_1fr] gap-3 p-2 pb-24 sm:p-3 sm:pb-24 lg:gap-4 lg:px-8 lg:pt-5">
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 pr-14">
         <Mascot className="size-8 text-brand" />
         <div className="min-w-0">
-          <ViewTitle name="Studio" who={solo ? accounts[0]!.name : "all three"} />
+          <ViewTitle name="Studio" who={solo ? accounts[0]!.name : accounts.length === 3 ? "all three" : "all accounts"} />
           <p className="text-sm text-snow-muted">
             {due > 0 ? (
               <span className="font-semibold text-snow">
