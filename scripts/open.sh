@@ -20,7 +20,8 @@ else
     npm run build --silent > data/logs/build.log 2>&1 || { tail -30 data/logs/build.log; echo "The build failed; the full log is data/logs/build.log."; exit 1; }
   fi
   mkdir -p data/logs
-  nohup npx next start -H 127.0.0.1 -p "$port" >> data/logs/server.log 2>&1 &
+  # npm start runs the pinned next in node_modules on 127.0.0.1; npx could fetch one.
+  nohup npm start -- -p "$port" >> data/logs/server.log 2>&1 &
   for _ in $(seq 1 60); do curl -s -o /dev/null "$url" && break; sleep 0.5; done
 fi
 open "$url"

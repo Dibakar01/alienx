@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
+import { local, ZONE } from "./time.ts";
 
 export type Claim = { text: string; source: "facts" | "seed" | "research" | "unverified" };
 export type Status = "draft" | "approved" | "rejected";
@@ -233,4 +234,24 @@ export function listTopics(status: TopicStatus): Topic[] {
 export function setTopic(id: number, status: TopicStatus): void {
   const done = db().prepare("UPDATE topics SET status = ? WHERE id = ?").run(status, id);
   if (!done.changes) throw new Error(`No topic with id ${id}`);
+}
+
+// Puts an idea back among the waiting ones, unless someone decided on it meanwhile: it was
+// skipped, or a post (not killed) was booked from it.
+export function setTopicIfFree(id: number): void {
+  db()
+    .prepare("UPDATE topics SET status = 'proposed' WHERE id = ? AND status = 'drafted' AND NOT EXISTS (SELECT 1 FROM posts WHERE topic_id = ? AND status != 'killed')")
+    .run(id, id);
+}
+
+// A copy of the database for each of the last 7 days, as dir/alienx-YYYY-MM-DD.db. SQLite's
+// own backup, so the copy is whole even while another process writes.
+export async function backup(dir: string, now = new Date()): Promise<string | null> {
+  if (process.env.ALIENX_DB === ":memory:") return null;
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `alienx-${local(now, ZONE).day}.db`);
+  await db().backup(file);
+  const old = fs.readdirSync(dir).filter((f) => /^alienx-\d{4}-\d{2}-\d{2}\.db$/.test(f)).sort().slice(0, -7);
+  for (const f of old) fs.rmSync(path.join(dir, f));
+  return file;
 }

@@ -1,18 +1,16 @@
 "use server";
 
+import fs from "node:fs";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Account, listAccounts, readAccount, tags, writeAccount } from "../lib/accounts.ts";
 import { factsPath, startFacts } from "../lib/generate.ts";
-import { readCorpus } from "../lib/corpus.ts";
-import { createPost, decide, getPost, type Post, setTopic, updatePost } from "../lib/db.ts";
-import { ingest } from "../lib/ingest.ts";
+import { createPost, decide, getPost, getTopic, type Post, setTopic, updatePost } from "../lib/db.ts";
 import { heldNear, slotFor } from "../lib/plan.ts";
-import { buildProfile } from "../lib/profile.ts";
 import { local, moveTo, zone } from "../lib/schedule.ts";
 
-export type FormState = { ok?: string; error?: string; handle?: string } | null;
+export type FormState = { ok?: string; error?: string; handle?: string; note?: string } | null;
 
 const message = (e: unknown) => (e instanceof z.ZodError ? e.issues.map((i) => i.message).join(" ") : e instanceof Error ? e.message : String(e));
 const lines = (text: string) => text.split("\n").map((l) => l.trim()).filter(Boolean);
@@ -44,6 +42,8 @@ const Schedule = z.object({ id: z.number().int(), handle: z.string(), topic_id: 
 export async function scheduleAction(input: unknown): Promise<{ post?: Post; error?: string }> {
   try {
     const d = Schedule.parse(input);
+    // The slot first: a full calendar must not leave the draft approved with nothing booked.
+    const at = slotFor(d.handle);
     decide(d.id, "approved", d.posts);
     // A draft made from a discovered idea keeps its link, so the post carries the idea's sources.
     const post = createPost({
@@ -53,7 +53,7 @@ export async function scheduleAction(input: unknown): Promise<{ post?: Post; err
       posts: d.posts,
       claims: d.claims,
       source: d.topic_id ? "plan" : "seed",
-      scheduled_at: slotFor(d.handle),
+      scheduled_at: at,
     });
     if (d.topic_id) setTopic(d.topic_id, "drafted");
     revalidatePath("/");
@@ -82,6 +82,7 @@ export async function changePostAction(input: unknown): Promise<{ post?: Post; e
     const p = getPost(c.id);
     const now = new Date();
     let post: Post;
+    if ((c.do === "move" || c.do === "posted") && p.status === "killed") throw new Error("That post was killed. Restore it first.");
     if (c.do === "move") {
       if (p.status === "posted") throw new Error("That post is already out.");
       if (c.day < local(now, zone).day) throw new Error("Pick today or later.");
@@ -132,7 +133,20 @@ export async function skipTopicAction(id: unknown): Promise<{ error?: string }> 
   }
 }
 
-// Adds an account, then ingests and profiles that account only.
+// Undo of a skip: the idea waits again, unless something else has decided it meanwhile.
+export async function unskipTopicAction(id: unknown): Promise<{ error?: string }> {
+  try {
+    const t = getTopic(Id.parse(id));
+    if (t.status === "skipped") setTopic(t.id, "proposed");
+    revalidatePath("/");
+    return {};
+  } catch (e) {
+    return { error: message(e) };
+  }
+}
+
+// Adds an account. Its voice is learned after, by /api/profile: that takes minutes, and a
+// server action that long would hold up every other action on the page.
 export async function saveAccountAction(_: FormState, form: FormData): Promise<FormState> {
   try {
     const field = (name: string) => String(form.get(name) ?? "").trim();
@@ -149,7 +163,9 @@ export async function saveAccountAction(_: FormState, form: FormData): Promise<F
       x_samples: lines(field("x_samples")),
     });
     const existing = listAccounts();
-    if (existing.some((a) => a.handle.toLowerCase() === account.handle.toLowerCase())) throw new Error(`@${account.handle} already exists.`);
+    // Checked on disk too, so a voices file that doesn't parse is never overwritten.
+    const onDisk = fs.existsSync(path.join(process.cwd(), "voices")) ? fs.readdirSync(path.join(process.cwd(), "voices")).map((f) => f.toLowerCase()) : [];
+    if (existing.some((a) => a.handle.toLowerCase() === account.handle.toLowerCase()) || onDisk.includes(`${account.handle.toLowerCase()}.json`)) throw new Error(`@${account.handle} already exists.`);
     if (account.inherits && !existing.some((a) => a.handle === account.inherits)) throw new Error(`@${account.inherits} is not an account here.`);
     if (!account.inherits && !account.source_url && !account.x_samples.length && !account.style?.length) {
       throw new Error("Pick a writing style, or give alienX something to study.");
@@ -159,33 +175,23 @@ export async function saveAccountAction(_: FormState, form: FormData): Promise<F
     const h = account.handle;
     const full = Boolean(field("facts")) && !startFacts(field("facts"), h);
     const note = full ? ` The facts file is full, so add these facts by hand to ${path.relative(process.cwd(), factsPath())}.` : "";
-    // The page refreshes once the voice is learned (or fails), so the sign-up sheet and its
-    // progress bar stay on screen for the whole wait. The account exists from here, so a
-    // failure still reports it saved: the same handle again would only say it exists.
-    try {
-      if (account.source_url) await ingest(account);
-      if (readCorpus(h).length || account.x_samples.length || account.style?.length) await buildProfile(h);
-    } catch (e) {
-      return { ok: `@${h} saved, but its voice wasn't learned: ${message(e).replace(/\.$/, "")}. Add past posts to try again.${note}`, handle: h };
-    } finally {
-      revalidatePath("/", "layout");
-    }
-    return { ok: `@${h} is ready.${note}`, handle: h };
+    // No revalidate here: the page refreshes once the voice is learned (or fails), so the
+    // sign-up sheet and its progress bar stay on screen for the whole wait.
+    return { ok: `@${h} saved.${note}`, handle: h, note };
   } catch (e) {
     return { error: message(e) };
   }
 }
 
-// Past X posts sharpen an existing profile: they are stored as x_samples and the profile is rebuilt.
+// Past X posts sharpen an existing profile: they are stored as x_samples here, and the page
+// then rebuilds the profile through /api/profile.
 export async function addSamplesAction(_: FormState, form: FormData): Promise<FormState> {
   try {
     const account = readAccount(String(form.get("handle") ?? ""));
     const added = lines(String(form.get("x_samples") ?? ""));
     if (!added.length) throw new Error("Paste at least one post.");
     writeAccount({ ...account, x_samples: [...new Set([...account.x_samples, ...added])] });
-    await buildProfile(account.handle);
-    revalidatePath("/", "layout");
-    return { ok: `${added.length} added. Profile rebuilt.` };
+    return { ok: `${added.length} added. Profile rebuilt.`, handle: account.handle };
   } catch (e) {
     return { error: message(e) };
   }

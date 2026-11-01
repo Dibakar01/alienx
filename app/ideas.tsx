@@ -11,7 +11,7 @@ import { createPortal } from "react-dom";
 import type { Topic } from "../lib/db.ts";
 import { fit, liked, type Taste } from "../lib/taste.ts";
 import type { AccountInfo } from "./accounts.tsx";
-import { skipTopicAction } from "./actions.ts";
+import { skipTopicAction, unskipTopicAction } from "./actions.ts";
 import { Bar, startJob, useActivity, type Where } from "./activity.tsx";
 import { ideaReason } from "./create-pick.ts";
 import { Mascot } from "./mascot.tsx";
@@ -65,7 +65,7 @@ export function Ideas({
   const finding = useActivity().jobs.filter((j) => j.kind === "discover" && j.where === "idea" && j.handle && handles.includes(j.handle));
   const [writing, setWriting] = useState(false);
 
-  // Skipped on this page and still undoable: hidden at once, sent to the server after UNDO_MS.
+  // Skipped on this page: hidden and sent to the server at once, and undoable for UNDO_MS.
   const [gone, setGone] = useState<number[]>([]);
   const [flicking, setFlicking] = useState<number | null>(null);
   const [undo, setUndo] = useState<Topic | null>(null);
@@ -150,6 +150,8 @@ export function Ideas({
   const skip = (t: Topic) => {
     // Already on its way out: a second press would send it twice.
     if (timers.current.has(t.id)) return;
+    // Sent now, so a reload or a closed tab cannot lose it; Undo takes it back.
+    start(async () => void (await skipTopicAction(t.id)));
     setFlicking(t.id);
     setTimeout(() => {
       setFlicking(null);
@@ -162,7 +164,6 @@ export function Ideas({
       setTimeout(() => {
         timers.current.delete(t.id);
         setUndo((u) => (u?.id === t.id ? null : u));
-        start(async () => void (await skipTopicAction(t.id)));
       }, UNDO_MS),
     );
   };
@@ -177,6 +178,7 @@ export function Ideas({
     timers.current.delete(t.id);
     setGone((g) => g.filter((id) => id !== t.id));
     setUndo(null);
+    start(async () => void (await unskipTopicAction(t.id)));
   };
 
   const state = (t: Topic) => (busy[t.handle] && active === t.id ? "drafting" : active === t.id ? "drafts open" : tried.includes(t.id) ? "drafted" : "");

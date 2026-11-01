@@ -1,7 +1,7 @@
 import { listAccounts } from "../lib/accounts.ts";
 import { ordered, readLocal } from "../lib/local.ts";
 import { rules } from "../lib/schedule.ts";
-import { readCorpus } from "../lib/corpus.ts";
+import { corpusCount } from "../lib/corpus.ts";
 import { type Finding, getTopic, listPosts, listTopics } from "../lib/db.ts";
 import { decisions } from "../lib/plan.ts";
 import { taste } from "../lib/taste.ts";
@@ -26,7 +26,7 @@ export default function Page() {
       ready: Boolean(profile),
       emoji: profile?.uses_emoji ?? false,
       banned: a.banned_words ?? [],
-      articles: readCorpus(a.handle).length,
+      articles: corpusCount(a.handle),
       samples: a.x_samples.length,
       cadence: (({ per_week, per_day, gap_min, weekday, weekend }) => ({ per_week, per_day, gap_min, weekday, weekend }))(rules(a.handle)),
     };

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 process.env.ALIENX_DB = ":memory:";
-const { claimDue, createPost, decide, getPost, listPosts, saveDrafts, takenSlots, updatePost } = await import("../lib/db.ts");
+const { backup, claimDue, createPost, decide, getPost, getTopic, listPosts, saveDrafts, saveTopics, setTopic, setTopicIfFree, takenSlots, updatePost } = await import("../lib/db.ts");
 
 const post = (handle: string, scheduled_at: string) =>
   createPost({ handle, posts: ["hello"], claims: [], source: "seed", scheduled_at });
@@ -52,4 +52,22 @@ test("getPost and updatePost keep the calendar tags listPosts shows", () => {
   assert.equal(getPost(p.id).picked, 1);
   assert.equal(getPost(p.id).angle, "story");
   assert.throws(() => updatePost(999999, { status: "killed" }), /No post/);
+});
+
+test("a failed pick puts its idea back only if nobody decided on it meanwhile", () => {
+  const [free, booked, skipped] = saveTopics("acme_studio", "2026-11-02", [1, 2, 3].map((i) => ({ title: `idea ${i}`, angle: "story", why: "now", findings: [] })));
+  for (const t of [free!, booked!]) setTopic(t.id, "drafted");
+  setTopic(skipped!.id, "skipped");
+  const p = createPost({ handle: "acme_studio", topic_id: booked!.id, posts: ["hi"], claims: [], source: "seed", scheduled_at: "2026-11-08T08:00:00.000Z" });
+  for (const t of [free!, booked!, skipped!]) setTopicIfFree(t.id);
+  assert.equal(getTopic(free!.id).status, "proposed");
+  assert.equal(getTopic(booked!.id).status, "drafted");
+  assert.equal(getTopic(skipped!.id).status, "skipped");
+  updatePost(p.id, { status: "killed" }); // a killed post no longer holds its idea
+  setTopicIfFree(booked!.id);
+  assert.equal(getTopic(booked!.id).status, "proposed");
+});
+
+test("an in-memory database is never backed up", async () => {
+  assert.equal(await backup("/nonexistent/backups"), null);
 });

@@ -41,7 +41,8 @@ export const Account = z.object({
   // What this account posts about. A draft's pillar must be one of these.
   pillars: z.array(z.string().trim().min(1)).optional(),
   inherits: z.string().regex(HANDLE, "Not a valid X handle.").optional(),
-  source_url: z.url("Not a valid URL.").optional(),
+  // A web address only: ingest fetches it, so no file: or other schemes.
+  source_url: z.url({ protocol: /^https?$/, error: "Not a valid URL." }).optional(),
   // Posts from the source that must never enter the corpus.
   exclude_urls: z.array(z.string()).optional(),
   // How the person wants to sound, picked as tags; the voice is built from these when there is no writing to study.
@@ -64,12 +65,21 @@ export function readAccount(handle: string): Account {
   return Account.parse(JSON.parse(fs.readFileSync(file(handle), "utf8")));
 }
 
+// A file that does not parse is left out and logged, so one bad hand edit cannot take the
+// whole app down.
 export function listAccounts(): Account[] {
   return fs
     .readdirSync(dir)
     .filter((f) => f.endsWith(".json"))
     .sort()
-    .map((f) => readAccount(f.slice(0, -".json".length)));
+    .flatMap((f) => {
+      try {
+        return [readAccount(f.slice(0, -".json".length))];
+      } catch (e) {
+        console.error(`voices/${f} skipped: ${e instanceof Error ? e.message : e}`);
+        return [];
+      }
+    });
 }
 
 export function writeAccount(account: Account): void {

@@ -74,6 +74,8 @@ npm test
 
 `scripts/agents.sh` (on Windows, `scripts/agents.ps1`) keeps alienX running in the background (the server, the minute clock, Sunday ideas, the daily pick); add `remove` to take it out again.
 
+Backups: a copy of the database is kept for the last 7 days in `data/backups`; to restore, stop alienX and copy one over `data/alienx.db`.
+
 ## Credits
 
 - Made by [Qalakaar](https://qalakaar.com). The look is One Flow, Qalakaar's scrapbook design system.

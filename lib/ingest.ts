@@ -15,13 +15,31 @@ const JUNK = [
   ".youtube-wrap", ".tweet", ".poll-embed", ".footnote-anchor", ".footnote-number",
 ].join(",");
 
-// At most one request per second, across every source.
+// At most one request per second, across every source. A request gives up after 30 seconds.
 let last = 0;
 async function get(url: string): Promise<Response> {
   const wait = last + 1000 - Date.now();
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   last = Date.now();
-  return fetch(url, { headers: { "user-agent": UA } });
+  return fetch(url, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(30_000) });
+}
+
+// The body as text, refused past 5 MB so an endless response cannot fill memory.
+const MAX_BYTES = 5 * 1024 * 1024;
+export async function body(res: Response): Promise<string> {
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  for (let r = await reader.read(); !r.done; r = await reader.read()) {
+    size += r.value.byteLength;
+    if (size > MAX_BYTES) {
+      await reader.cancel();
+      throw new Error(`${res.url} is larger than 5 MB`);
+    }
+    parts.push(r.value);
+  }
+  return Buffer.concat(parts).toString("utf8");
 }
 
 // HTML to clean text. Paragraphs are separated by a blank line, line breaks inside
@@ -87,7 +105,7 @@ export async function ingest(account: Account): Promise<IngestReport> {
 
   const feedRes = await get(`${base}/feed`);
   if (!feedRes.ok) throw new Error(`${account.handle}: feed returned ${feedRes.status}`);
-  const feed = await new Parser().parseString(await feedRes.text());
+  const feed = await new Parser().parseString(await body(feedRes));
   for (const item of feed.items) {
     if (!item.link) continue;
     keep(
@@ -105,14 +123,22 @@ export async function ingest(account: Account): Promise<IngestReport> {
   if (!mapRes.ok) {
     report.warnings.push(`sitemap returned ${mapRes.status}, so only the feed was read`);
   } else {
-    const $ = cheerio.load(await mapRes.text(), { xml: true });
+    const $ = cheerio.load(await body(mapRes), { xml: true });
+    // Only pages on the blog's own site, as reached after redirects (a Substack with its own
+    // domain redirects there), so a sitemap cannot send requests to other hosts.
+    const origin = new URL(mapRes.url).origin;
+    const ours = (u: string) => URL.parse(u)?.origin === origin;
     // ponytail: Substack post URLs only (/p/). Other blogs get their feed alone;
     // widen this when a non-Substack source needs its archive.
-    const older = $("loc").map((_, el) => clean($(el).text().trim())).get().filter((u) => u.includes("/p/") && !seen.has(u) && !excluded.has(u));
+    const older = $("loc").map((_, el) => clean($(el).text().trim())).get().filter((u) => u.includes("/p/") && ours(u) && !seen.has(u) && !excluded.has(u));
     for (const url of older) {
       const res = await get(url);
       if (!res.ok) throw new Error(`${account.handle}: ${url} returned ${res.status}`);
-      keep(fromPage(await res.text(), url), "sitemap");
+      if (!ours(res.url)) {
+        report.warnings.push(`${url} redirected off the blog, so it was skipped`);
+        continue;
+      }
+      keep(fromPage(await body(res), url), "sitemap");
     }
   }
 

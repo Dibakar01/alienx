@@ -3,10 +3,11 @@
 // Account upkeep, in one overlay over the object: teach an account with real past posts,
 // or add a new one. Both reuse the save actions. The overlay is always mounted and only
 // opened and closed, so a save keeps running when it is closed.
+import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState } from "react";
 import { type FormState, addSamplesAction } from "./actions.ts";
 import { startJob } from "./activity.tsx";
-import { Onboard } from "./onboard.tsx";
+import { learnVoice, Onboard } from "./onboard.tsx";
 import { Working } from "./working.tsx";
 
 // While a save is studying a voice, it shows in the activity pill on every screen.
@@ -113,7 +114,16 @@ export function Accounts({
 }
 
 function PastPosts({ hidden, accounts, who, onWho }: { hidden: boolean; accounts: AccountInfo[]; who: string; onWho: (handle: string) => void }) {
-  const [state, action, pending] = useActionState(addSamplesAction, null);
+  const router = useRouter();
+  // The posts are saved by the action, then the voice is rebuilt by /api/profile; the form
+  // stays pending (and its bar up) through both.
+  const [state, action, pending] = useActionState(async (prev: FormState, form: FormData): Promise<FormState> => {
+    const saved = await addSamplesAction(prev, form);
+    if (!saved?.handle) return saved;
+    const r = await learnVoice(saved.handle);
+    router.refresh();
+    return r.error ? { error: r.error } : saved;
+  }, null);
   const since = useJobWhile(pending, "Rebuilding a voice from past posts");
   const [valid, setValid] = useState(false);
   // A saved form is cleared, so it is not ready again until something is pasted.

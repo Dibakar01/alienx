@@ -3,7 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { tags } from "../lib/accounts.ts";
+import { Account, tags } from "../lib/accounts.ts";
+import { body } from "../lib/ingest.ts";
 import { prompt } from "../lib/llm.ts";
 import { ordered } from "../lib/local.ts";
 import { rules, withLocal } from "../lib/schedule.ts";
@@ -80,4 +81,13 @@ test("a prompt saved with Windows line endings still splits into its two parts",
     process.chdir(cwd);
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("a source must be a web address, and a huge response is refused", async () => {
+  const ok = (source_url: string) => Account.safeParse({ handle: "amy", display_name: "Amy", type: "personal", source_url }).success;
+  assert.equal(ok("https://amy.substack.com"), true);
+  assert.equal(ok("file:///etc/passwd"), false);
+  assert.equal(ok("ftp://amy.example"), false);
+  assert.equal(await body(new Response("hello")), "hello");
+  await assert.rejects(body(new Response("x".repeat(5 * 1024 * 1024 + 1))), /larger than 5 MB/);
 });

@@ -38,7 +38,7 @@ if (-not $up) {
     }
   }
   # cmd does the redirect: Start-Process cannot send stdout and stderr to one file.
-  Start-Process cmd.exe -ArgumentList "/c npx next start -H 127.0.0.1 -p $port >> data\logs\server.log 2>&1" -WorkingDirectory $root -WindowStyle Hidden
+  Start-Process cmd.exe -ArgumentList "/c npm start -- -p $port >> data\logs\server.log 2>&1" -WorkingDirectory $root -WindowStyle Hidden
   $deadline = (Get-Date).AddSeconds(30)
   while ((Get-Date) -lt $deadline -and -not (Test-Up)) { Start-Sleep -Milliseconds 500 }
 }

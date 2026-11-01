@@ -4,6 +4,7 @@
 // about, and how you sound, the last two picked as tags (tap a suggestion or type your own).
 // Writing to study, facts and a voice to inherit are optional, folded under "Teach it more".
 // The voice is built from your writing when you give some, and from the style tags when not.
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { type FormState, saveAccountAction } from "./actions.ts";
 import { startJob } from "./activity.tsx";
@@ -15,8 +16,16 @@ const STYLES = ["Plainspoken", "Witty", "Warm", "Bold", "Story-led", "Short line
 const MAX_TOPICS = 6;
 const MAX_STYLE = 5;
 
+// Learning a voice takes minutes, so it is a route (app/api/profile), not part of the save:
+// a server action that long would hold up every other one on the page.
+export const learnVoice = (handle: string, study = false): Promise<{ error?: string }> =>
+  fetch("/api/profile", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ handle, study }) })
+    .then((r) => r.json() as Promise<{ error?: string }>)
+    .catch((e: unknown) => ({ error: String(e) }));
+
 export function Onboard({ first = false, handles = [], onDone }: { first?: boolean; handles?: string[]; onDone: (handle: string) => void }) {
   // Submitted by hand, not <form action>, so a failed save keeps what was typed.
+  const router = useRouter();
   const [state, setState] = useState<FormState>(null);
   const [pending, start] = useTransition();
   const form = useRef<HTMLFormElement>(null);
@@ -56,7 +65,20 @@ export function Onboard({ first = false, handles = [], onDone }: { first?: boole
       onSubmit={(e) => {
         e.preventDefault();
         const data = new FormData(e.currentTarget);
-        start(async () => setState(await saveAccountAction(state, data)));
+        start(async () => {
+          const saved = await saveAccountAction(state, data);
+          if (!saved?.handle) return setState(saved);
+          const h = saved.handle;
+          const note = saved.note ?? "";
+          // The bar stays up while the voice is learned. The account exists from here, so a
+          // failure still reports it saved: the same handle again would only say it exists.
+          const r = await learnVoice(h, true);
+          const text = r.error ? `@${h} saved, but its voice wasn't learned: ${r.error.replace(/\.$/, "")}. Add past posts to try again.${note}` : `@${h} is ready.${note}`;
+          // The sheet is cleared and handed over next, so anything to act on shows above the dock.
+          if (r.error || note) startJob({ label: text, kind: "draft", typical: 0 })({ ok: !r.error, text });
+          router.refresh();
+          setState({ ok: text, handle: h });
+        });
       }}
       onInput={(e) => {
         const f = e.currentTarget;

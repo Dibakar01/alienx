@@ -1,10 +1,11 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import { listAccounts, readAccount } from "./accounts.ts";
 import { ArtSpec, artPath, rasterize, renderArt } from "./art.ts";
-import { createPost, getPost, getTopic, listPosts, listTopics, type Post, saveTopics, setTopic, takenSlots, type Topic, updatePost } from "./db.ts";
-import { ANGLES, facts, generate, voice } from "./generate.ts";
+import { createPost, getPost, getTopic, listPosts, listTopics, type Post, saveTopics, setTopic, setTopicIfFree, takenSlots, type Topic, updatePost } from "./db.ts";
+import { ANGLES, generate, voice } from "./generate.ts";
 import { ask, prompt } from "./llm.ts";
 import { local, nextSlot, notify, rules, zone } from "./schedule.ts";
 import { fit, liked, taste } from "./taste.ts";
@@ -30,8 +31,18 @@ const Research = z.object({
 
 // The image for a post: the model plans a visual metaphor (objects, a composition and at
 // most three words); code draws it. A failed image never loses the post; it shows without
-// one and can be remade.
-export async function makeArt(postId: number): Promise<Post> {
+// one and can be remade. A second call for a post being drawn joins the first.
+const drawing = new Map<number, Promise<Post>>();
+export function makeArt(postId: number): Promise<Post> {
+  let run = drawing.get(postId);
+  if (!run) {
+    run = draw(postId).finally(() => drawing.delete(postId));
+    drawing.set(postId, run);
+  }
+  return run;
+}
+
+async function draw(postId: number): Promise<Post> {
   const post = getPost(postId);
   // Drawing again: the model sees the picture it made before, so the new one differs.
   const before = post.art && typeof post.art === "object" && "headline" in post.art ? JSON.stringify(post.art) : "(none: this is the first picture)";
@@ -39,10 +50,15 @@ export async function makeArt(postId: number): Promise<Post> {
   const spec = await ask(ArtSpec, p.system, p.user);
   // A repeated seed would keep the same image address, and the browser its cached picture.
   if ((post.art as { seed?: number } | null)?.seed === spec.seed) spec.seed = (spec.seed % 99999) + 1;
-  const svg = artPath(post.id, "svg");
-  fs.mkdirSync(path.dirname(svg), { recursive: true });
-  fs.writeFileSync(svg, renderArt(spec));
-  await rasterize(svg, artPath(post.id, "png"));
+  // The svg is only Chrome's input, so it lives in a temporary folder.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "alienx-art-"));
+  try {
+    const svg = path.join(dir, `${post.id}.svg`);
+    fs.writeFileSync(svg, renderArt(spec));
+    await rasterize(svg, artPath(post.id, "png"));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
   return updatePost(post.id, { art: spec });
 }
 
@@ -83,7 +99,8 @@ export async function research(handle: string, now = new Date()): Promise<Topic[
     min: String(Math.max(3, count)),
     count: String(count),
     today: local(now, zone).day,
-    facts: facts(),
+    // The private facts stay out of a run with web tools; drafting, which has none, gets them.
+    facts: "(not used for research: say nothing about the account or its company beyond the voice)",
     handle,
     voice: JSON.stringify(voice(account), null, 2),
     pillars: pillars.join(", ") || "none set",
@@ -107,6 +124,18 @@ export async function research(handle: string, now = new Date()): Promise<Topic[
   );
 }
 
+// One research run per account at a time in this process: a second ask joins the first, so
+// alienX topping up ideas and someone pressing Discover never search twice at once.
+const finding = new Map<string, Promise<Topic[]>>();
+export function researchOnce(handle: string): Promise<Topic[]> {
+  let run = finding.get(handle);
+  if (!run) {
+    run = research(handle).finally(() => finding.delete(handle));
+    finding.set(handle, run);
+  }
+  return run;
+}
+
 // One topic becomes one scheduled post with its image. The five variants are drafted as
 // usual and the one in the topic's angle is kept; the others stay in the drafts table.
 // `onlyIfFree` (alienX's pick) books nothing when the account gained a post while drafting:
@@ -116,12 +145,12 @@ export async function draftTopic(topicId: number, onlyIfFree = false): Promise<P
   const topic = getTopic(topicId);
   if (topic.status !== "proposed") throw new Error(`That topic is already ${topic.status}.`);
   // Taken off the waiting ideas at once, so nobody drafts it again from Create meanwhile;
-  // it goes back if drafting fails.
+  // it goes back if drafting fails, unless someone booked it meanwhile.
   setTopic(topic.id, "drafted");
   try {
     return await draftTaken(topic, onlyIfFree);
   } catch (e) {
-    setTopic(topic.id, "proposed");
+    setTopicIfFree(topic.id);
     throw e;
   }
 }
@@ -136,7 +165,7 @@ async function draftTaken(topic: Topic, onlyIfFree: boolean): Promise<Post | nul
   });
   const pick = drafts.find((d) => d.angle === topic.angle) ?? drafts[0]!;
   if (onlyIfFree && takenSlots(topic.handle, new Date().toISOString()).length) {
-    setTopic(topic.id, "proposed"); // nothing booked: the idea waits for another day
+    setTopicIfFree(topic.id); // nothing booked: the idea waits for another day, unless approved meanwhile
     return null;
   }
   const post = createPost({
@@ -171,7 +200,7 @@ const voiced = (handle: string) => {
 export async function pickFor(handle: string, now = new Date()): Promise<Post | null> {
   if (!voiced(handle) || takenSlots(handle, now.toISOString()).length) return null;
   let ideas = listTopics("proposed").filter((t) => t.handle === handle);
-  if (!ideas.length) ideas = await research(handle, now);
+  if (!ideas.length) ideas = await researchOnce(handle);
   // The idea that fits what this person drafts and skips best, but not the same angle as the
   // last idea it drafted when another is waiting, so the week stays a mix.
   const likes = taste(decisions(), handle);
@@ -190,7 +219,7 @@ export async function daily(only?: string): Promise<number> {
       const post = await pickFor(handle);
       console.log(post ? `@${handle}: picked #${post.id} for ${post.scheduled_at}` : `@${handle}: already has a post ahead`);
       // Fewer than two ideas left: discover fresh ones now, so tomorrow's pick has a choice.
-      if (voiced(handle) && listTopics("proposed").filter((t) => t.handle === handle).length < 2) console.log(`@${handle}: ${(await research(handle)).length} fresh ideas`);
+      if (voiced(handle) && listTopics("proposed").filter((t) => t.handle === handle).length < 2) console.log(`@${handle}: ${(await researchOnce(handle)).length} fresh ideas`);
     } catch (e) {
       failed++;
       console.error(`@${handle}: no pick today (${e instanceof Error ? e.message : e})`);

@@ -28,20 +28,23 @@ AGENT_PATH="${NODE:h}:${CLAUDE:h}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
 mkdir -p $ROOT/data/logs $AGENTS
 (cd $ROOT && $NPM run build >/dev/null)
 
+# XML-escapes a value for the plist, so a path with &, < or > still makes valid XML.
+x() { local s=${1//&/&amp;}; s=${s//</&lt;}; print -r -- "${s//>/&gt;}"; }
+
 plist() { # label, schedule xml, program args...
   local label=$1 when=$2; shift 2
-  local args=""; for a in "$@"; do args+="<string>${a//&/&amp;}</string>"; done
+  local args=""; for a in "$@"; do args+="<string>$(x "$a")</string>"; done
   cat > $AGENTS/app.alienx.$label.plist <<XML
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>Label</key><string>app.alienx.$label</string>
   <key>ProgramArguments</key><array>$args</array>
-  <key>WorkingDirectory</key><string>$ROOT</string>
-  <key>EnvironmentVariables</key><dict><key>PATH</key><string>$AGENT_PATH</string><key>CLAUDE_BIN</key><string>$CLAUDE</string></dict>
+  <key>WorkingDirectory</key><string>$(x "$ROOT")</string>
+  <key>EnvironmentVariables</key><dict><key>PATH</key><string>$(x "$AGENT_PATH")</string><key>CLAUDE_BIN</key><string>$(x "$CLAUDE")</string></dict>
   $when
-  <key>StandardOutPath</key><string>$ROOT/data/logs/$label.log</string>
-  <key>StandardErrorPath</key><string>$ROOT/data/logs/$label.log</string>
+  <key>StandardOutPath</key><string>$(x "$ROOT")/data/logs/$label.log</string>
+  <key>StandardErrorPath</key><string>$(x "$ROOT")/data/logs/$label.log</string>
 </dict></plist>
 XML
   plutil -lint -s $AGENTS/app.alienx.$label.plist

@@ -31,3 +31,8 @@ export function readCorpus(handle: string): Article[] {
       return { title: JSON.parse(m[1]!), url: m[2]!, date: m[3]!, body: m[4]!.trimEnd() };
     });
 }
+
+// How many articles an account has, without reading them.
+export function corpusCount(handle: string): number {
+  return fs.existsSync(dir(handle)) ? fs.readdirSync(dir(handle)).filter((f) => f.endsWith(".md")).length : 0;
+}

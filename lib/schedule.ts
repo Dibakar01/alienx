@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
-import shared from "../config/slots.json" with { type: "json" };
+import fs from "node:fs";
+import path from "node:path";
 import { claimDue, type Post } from "./db.ts";
 import { readLocal } from "./local.ts";
 import { notifyCommand } from "./platform.ts";
@@ -18,11 +19,14 @@ export const withLocal = (base: Slots, own: Record<string, unknown> = {}): Slots
   const { zone, ...accounts } = own;
   return { ...base, zone: typeof zone === "string" && zone ? zone : base.zone, accounts: { ...base.accounts, ...(accounts as Record<string, Rules>) } };
 };
-const slots = withLocal(shared as Slots, readLocal().slots);
-// The zone posts are booked in. The pages still show India time (ZONE in lib/time.ts).
-export const zone = slots.zone;
+// Read on every call (two small files), so an edit takes effect without restarting the server.
+// A file read, not a JSON import, which `next build` would bake in.
+const slots = (): Slots =>
+  withLocal(JSON.parse(fs.readFileSync(path.join(process.cwd(), "config", "slots.json"), "utf8")) as Slots, readLocal().slots);
+// The zone posts are booked in, read once at startup. The pages still show India time (ZONE in lib/time.ts).
+export const zone = slots().zone;
 
-export function rules(handle: string, cfg: Slots = slots): Rules {
+export function rules(handle: string, cfg: Slots = slots()): Rules {
   return (Object.hasOwn(cfg.accounts, handle) && cfg.accounts[handle]) || cfg.accounts.default!;
 }
 
@@ -47,7 +51,7 @@ function full(t: Date, held: Date[], r: Rules, zone: string): string | null {
 // The first instant from `from` that sits inside one of the account's windows, on a day and
 // in a week with room left, and far enough from every slot it already holds. Walks in
 // step_min steps. `taken` should reach back a day before `from`, so earlier posts today count.
-export function nextSlot(handle: string, from: Date, taken: string[], cfg: Slots = slots): Date {
+export function nextSlot(handle: string, from: Date, taken: string[], cfg: Slots = slots()): Date {
   const r = rules(handle, cfg);
   const held = taken.map((s) => new Date(s));
   const step = cfg.step_min * MIN;
@@ -67,7 +71,7 @@ export function nextSlot(handle: string, from: Date, taken: string[], cfg: Slots
 // that is still ahead and clear of the account's other posts; otherwise it takes the free
 // moment that day nearest to that time, preferring the account's windows, between 08:00 and
 // 23:00. A day that is over, or has no moment far enough from the other posts, is refused.
-export function moveTo(handle: string, current: string, day: string, now: Date, taken: string[], cfg: Slots = slots): Date {
+export function moveTo(handle: string, current: string, day: string, now: Date, taken: string[], cfg: Slots = slots()): Date {
   const r = rules(handle, cfg);
   const held = taken.map((s) => new Date(s).getTime());
   const free = (t: number) => !held.some((h) => Math.abs(h - t) < r.gap_min * MIN);

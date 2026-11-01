@@ -3,6 +3,8 @@
 # overwrites a file you already have.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# Only this user can open the folder: voices, corpus, facts and data stay private on a shared Mac.
+chmod 700 .
 ok() { printf '  \033[32m✓\033[0m %s\n' "$1"; }
 no() { printf '  \033[31m✗\033[0m %s\n' "$1"; missing=1; }
 missing=0

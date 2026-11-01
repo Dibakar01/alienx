@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 process.env.ALIENX_DB = ":memory:";
-const { at, local, moveTo, nextSlot, tick } = await import("../lib/schedule.ts");
+const { at, local, moveTo, nextSlot, rules, tick } = await import("../lib/schedule.ts");
 const { createPost } = await import("../lib/db.ts");
 
 const cfg = {
@@ -89,4 +92,24 @@ test("a tick notifies once for posts that came due, and the next tick stays quie
   assert.equal(tick(now, (m) => said.push(m)).length, 1);
   assert.equal(tick(now, (m) => said.push(m)).length, 0);
   assert.deepEqual(said, ["A post is due: @sam_writes. Open alienX to post."]);
+});
+
+test("posting windows are read fresh on each call, so an edit needs no restart", () => {
+  const here = process.cwd();
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "alienx-slots-"));
+  fs.mkdirSync(path.join(tmp, "config"));
+  const write = (per_week: number) =>
+    fs.writeFileSync(path.join(tmp, "config", "slots.json"), JSON.stringify({ zone: "Asia/Kolkata", step_min: 15, accounts: { default: { ...cfg.accounts.a, per_week } } }));
+  process.chdir(tmp);
+  try {
+    write(3);
+    assert.equal(rules("x").per_week, 3);
+    write(5);
+    assert.equal(rules("x").per_week, 5);
+    fs.writeFileSync(path.join(tmp, "config", "local.json"), JSON.stringify({ slots: { x: { ...cfg.accounts.a, per_week: 7 } } }));
+    assert.equal(rules("x").per_week, 7);
+  } finally {
+    process.chdir(here);
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });

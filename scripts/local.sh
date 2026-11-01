@@ -11,4 +11,5 @@ npm run build --silent >/dev/null
 echo "Starting at $url (Ctrl+C to stop)"
 # Open the browser as soon as the server answers.
 ( for _ in $(seq 1 60); do curl -s -o /dev/null "$url" && { open "$url"; break; }; sleep 0.5; done ) &
-exec npx next start -H 127.0.0.1 -p 3000
+# npm start runs the pinned next in node_modules on 127.0.0.1; npx could fetch one.
+exec npm start -- -p 3000

@@ -900,11 +900,16 @@ export function renderArt(spec: ArtSpec): string {
 const run = promisify(execFile);
 
 // SVG to a 1600x900 PNG with headless Chrome (or Edge on Windows), size read from the PNG.
+// Chrome writes a temporary PNG next to the target, which replaces the old picture only once
+// it checks out, so a failed redraw keeps the picture there was.
 export async function rasterize(svgPath: string, pngPath: string): Promise<void> {
   const chrome = chromePath();
   if (!chrome) throw new Error("Found no Chrome or Edge to draw the picture. Install Chrome, or set CHROME_BIN to its path.");
-  const png = path.resolve(pngPath);
-  await fs.promises.rm(png, { force: true }); // a stale PNG must not pass the size check
+  const target = path.resolve(pngPath);
+  await fs.promises.mkdir(path.dirname(target), { recursive: true });
+  // A fresh name, so a stale file cannot pass the size check. Chrome picks the format from
+  // the extension, so it stays .png.
+  const png = `${target.slice(0, -4)}.${process.pid}-${Date.now()}.tmp.png`;
   const profile = await fs.promises.mkdtemp(path.join(os.tmpdir(), "alienx-chrome-"));
   try {
     await run(
@@ -923,16 +928,18 @@ export async function rasterize(svgPath: string, pngPath: string): Promise<void>
       ],
       { timeout: 60_000, windowsHide: true },
     );
+    let size: ReturnType<typeof pngSize>;
+    try {
+      size = pngSize(await fs.promises.readFile(png));
+    } catch (e) {
+      throw new Error(`Chrome left no readable PNG at ${png}: ${(e as Error).message}`);
+    }
+    if (size?.width !== 1600 || size.height !== 900) throw new Error(`${png} is ${size ? `${size.width}x${size.height}` : "not a PNG"}, expected 1600x900. Check CHROME_BIN and the Chrome flags.`);
+    await fs.promises.rename(png, target);
   } finally {
     await fs.promises.rm(profile, { recursive: true, force: true });
+    await fs.promises.rm(png, { force: true });
   }
-  let size: ReturnType<typeof pngSize>;
-  try {
-    size = pngSize(await fs.promises.readFile(png));
-  } catch (e) {
-    throw new Error(`Chrome left no readable PNG at ${png}: ${(e as Error).message}`);
-  }
-  if (size?.width !== 1600 || size.height !== 900) throw new Error(`${png} is ${size ? `${size.width}x${size.height}` : "not a PNG"}, expected 1600x900. Check CHROME_BIN and the Chrome flags.`);
 }
 
 export function artPath(id: number | string, ext: "svg" | "png"): string {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import type { Draft, Post, Topic } from "../lib/db.ts";
 import type { Taste } from "../lib/taste.ts";
@@ -635,6 +636,8 @@ function Card({
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
   const [failed, setFailed] = useState(false);
+  // What went wrong on Approve, when the server says (a full calendar, say).
+  const [why, setWhy] = useState("");
   const [busy, start] = useTransition();
   const single = posts.length === 1;
   const text = posts[page] ?? "";
@@ -650,6 +653,7 @@ function Card({
   // Its picture: when drawing started (0 when idle), and a version once it is drawn.
   const [drawing, setDrawing] = useState(0);
   const [art, setArt] = useState("");
+  const router = useRouter();
 
   const decide = (next: Status) =>
     start(async () => {
@@ -673,6 +677,7 @@ function Card({
     start(async () => {
       const result = await scheduleAction({ id: draft.id, handle: draft.handle, topic_id: topicId, posts, claims: draft.claims });
       setFailed(Boolean(result.error));
+      setWhy(result.error ?? "");
       if (result.error || !result.post) return;
       setScheduled({ id: result.post.id, at: result.post.scheduled_at });
       navigator.vibrate?.(12); // a small knock on phones, as the stamp lands
@@ -683,7 +688,10 @@ function Card({
       setDrawing(d.since);
       void d.done.then((p) => {
         setDrawing(0);
-        if (p) setArt(artVersion(p));
+        if (!p) return;
+        setArt(artVersion(p));
+        // The Studio and the front door get the picture now, not at the next minute's refresh.
+        router.refresh();
       });
     });
 
@@ -870,7 +878,7 @@ function Card({
           )}
           {failed && (
             <p className="basis-full text-sm font-medium" role="alert">
-              Signal lost. Try again.
+              {why && !/fetch|network/i.test(why) ? why : "Signal lost. Try again."}
             </p>
           )}
         </div>

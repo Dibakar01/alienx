@@ -35,8 +35,9 @@ if ($LASTEXITCODE -ne 0) { Write-Host 'The build failed; run npm run build to se
 Set-Content (Join-Path $dir 'hidden.vbs') 'WScript.Quit CreateObject("WScript.Shell").Run("""" & WScript.Arguments(0) & """", 0, True)' -Encoding ASCII
 $head = "@echo off`r`ncd /d `"%~dp0..\..`"`r`n"
 $run = @{
-  # next start has no KeepAlive here, so the loop brings it back if it stops.
-  server = ":loop`r`ncall npx next start -H 127.0.0.1 -p $port >> data\logs\server.log 2>&1`r`nping -n 6 127.0.0.1 > NUL`r`ngoto loop"
+  # next start has no KeepAlive here, so the loop brings it back if it stops. npm start runs
+  # the pinned next in node_modules on 127.0.0.1; npx could fetch one.
+  server = ":loop`r`ncall npm start -- -p $port >> data\logs\server.log 2>&1`r`nping -n 6 127.0.0.1 > NUL`r`ngoto loop"
   tick = 'node --env-file-if-exists=.env scripts/tick.ts >> data\logs\tick.log 2>&1'
   plan = 'node --env-file-if-exists=.env scripts/plan.ts --research-only >> data\logs\plan.log 2>&1'
   pick = 'node --env-file-if-exists=.env scripts/plan.ts --daily >> data\logs\pick.log 2>&1'
