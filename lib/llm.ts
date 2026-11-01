@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
+import { claudeCommand } from "./platform.ts";
 
 // Loads prompts/{name}.md and fills its {{slots}}. The file holds the system prompt,
 // a line of five equals signs, then the user message. Prompt text lives there, never here.
@@ -88,10 +89,12 @@ export async function ask<T extends z.ZodType>(
   delete shape.$schema;
   const tools = (opts.tools ?? []).join(",");
 
-  // The program name comes from the environment, so the bundler is told not to trace it.
+  // The program comes from the environment and PATH, so the bundler is told not to trace it.
+  const claude = claudeCommand();
   const child = spawn(
-    /*turbopackIgnore: true*/ process.env.CLAUDE_BIN ?? "claude",
+    /*turbopackIgnore: true*/ claude.cmd,
     [
+      ...claude.pre,
       "-p",
       "--model", model,
       "--effort", "high",
@@ -106,7 +109,7 @@ export async function ask<T extends z.ZodType>(
       "--verbose",
       "--json-schema", JSON.stringify(shape),
     ],
-    { cwd: os.tmpdir(), env, timeout: opts.timeoutMs ?? 600_000 },
+    { cwd: os.tmpdir(), env, timeout: opts.timeoutMs ?? 600_000, windowsHide: true },
   );
   child.stdin.end(user);
 

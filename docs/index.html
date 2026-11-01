@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>alienX</title>
-<meta name="description" content="alienX writes your X. You press post. A free Mac app that runs on your Claude plan.">
+<meta name="description" content="alienX writes your X. You press post. A free app for Mac and Windows that runs on your Claude plan.">
 <meta name="color-scheme" content="dark light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cmask id='m'%3E%3Cpath d='M12 2C17.6 2 21 5.4 21 10C21 15.6 16.4 22 12 22C7.6 22 3 15.6 3 10C3 5.4 6.4 2 12 2Z' fill='white'/%3E%3Cpath d='M5.2 9Q9.95 9.12 10.8 13.8Q6.05 13.68 5.2 9Z'/%3E%3Cpath d='M18.8 9Q14.05 9.12 13.2 13.8Q17.95 13.68 18.8 9Z'/%3E%3C/mask%3E%3Crect width='24' height='24' fill='%23D92819' mask='url(%23m)'/%3E%3C/svg%3E">
 <style>
@@ -73,10 +73,15 @@ h1 { margin: 0; font-size: clamp(2.3rem, 7vw, 4.2rem); line-height: 1.04; letter
 .lede { margin: 0; max-width: 40rem; font-size: 1.15rem; color: var(--grey); }
 .lede small { display: block; margin-top: 6px; font-size: .95rem; color: var(--pencil); }
 
-.download { display: inline-flex; align-items: center; gap: 12px; margin-top: 6px; padding: 16px 28px; min-height: 56px; border-radius: 12px; background: var(--red); color: var(--white); font-size: 1.2rem; font-weight: 600; text-decoration: none; transition: background-color .15s, translate .3s cubic-bezier(.34, 1.4, .64, 1); }
-.download:hover { background: var(--red-deep); }
+.downloads { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; }
+.download { display: inline-flex; align-items: center; justify-content: center; gap: 12px; padding: 16px 24px; border: 1.5px solid var(--red); min-height: 56px; border-radius: 12px; background: var(--red); color: var(--white); font-size: 1.2rem; font-weight: 600; text-decoration: none; transition: background-color .15s, translate .3s cubic-bezier(.34, 1.4, .64, 1); }
+.download:hover { background: var(--red-deep); border-color: var(--red-deep); }
 .download:active { translate: 0 1px; transition-duration: .1s; }
-.download svg { width: 22px; height: 22px; }
+.download svg { width: 22px; height: 22px; flex: none; }
+.download.alt { background: transparent; border-color: var(--black); color: var(--black); }
+.download.alt:hover { background: color-mix(in srgb, var(--black) 7%, transparent); }
+.notes { display: grid; gap: 10px; }
+.os { display: grid; gap: 6px; }
 
 .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .steps li { padding: 8px 14px 8px 10px; border: 1.5px dashed color-mix(in srgb, var(--black) 30%, var(--white)); border-radius: 20px; font-weight: 500; }
@@ -86,12 +91,16 @@ h1 { margin: 0; font-size: clamp(2.3rem, 7vw, 4.2rem); line-height: 1.04; letter
 .note { margin: 0; max-width: 40rem; font-size: .92rem; color: var(--pencil); padding-left: 12px; border-left: 3px solid var(--rule); }
 .note strong { color: var(--black); font-weight: 600; }
 
-.terminal { display: grid; gap: 10px; max-width: 60rem; }
+.terminal { display: grid; gap: 18px; max-width: 60rem; }
 .terminal p { margin: 0; color: var(--snow-muted); }
 .cmd { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 16px; border: 1px solid var(--snow-line); border-radius: 12px; }
 .cmd code { flex: 1; min-width: 0; font: 500 .92rem/1.45 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .cmd button { flex: none; min-height: 44px; padding: 0 16px; border: 1px solid var(--snow-line); border-radius: 10px; background: transparent; color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
 .cmd button:hover { border-color: var(--snow); }
+@media (max-width: 480px) {
+  .downloads, .download { width: 100%; }
+  .download { padding: 14px 18px; font-size: 1.1rem; }
+}
 
 .shot { --r: 0.6deg; padding: 18px; }
 .shot img { width: 100%; height: auto; border-radius: 6px; border: 1px solid var(--rule); }
@@ -121,12 +130,18 @@ footer { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: .9rem; color:
   <main class="sheet tape hero">
     <h1>alienX writes your X. <span class="pencil-mark">You press post.<svg viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true"><path d="M1 6.5C18 4.8 33 7.6 50 5.6S82 3.9 99 5.2"/></svg></span></h1>
     <p class="lede">It finds ideas, writes in your voice, draws the picture and books the time. Nothing posts until you tap.
-      <small>Runs on your Mac. Free with your Claude plan.</small></p>
+      <small>Runs on your Mac or Windows PC. Free with your Claude plan.</small></p>
 
-    <a class="download" href="download/alienX.zip" download>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>
-      Download for Mac
-    </a>
+    <div class="downloads" id="downloads">
+      <a class="download" id="mac" href="download/alienX.zip" download>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>
+        Download for Mac
+      </a>
+      <a class="download alt" id="win" href="download/alienX-windows.zip" download>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>
+        Download for Windows
+      </a>
+    </div>
 
     <ol class="steps" aria-label="After downloading">
       <li><b>1</b>Open the zip</li>
@@ -134,15 +149,32 @@ footer { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: .9rem; color:
       <li><b>3</b>Make your account <span>handle, topics, writing style</span></li>
     </ol>
 
-    <p class="note">First open only: <strong>System Settings → Privacy &amp; Security → Open Anyway</strong>.</p>
-    <p class="note">Needs a Mac with <a href="https://nodejs.org">Node 24+</a>, <a href="https://www.google.com/chrome">Google Chrome</a> and the <a href="https://claude.com/claude-code">Claude Code CLI</a> signed in.</p>
+    <div class="notes" id="notes">
+      <div class="os" id="notes-mac">
+        <p class="note"><strong>Mac.</strong> First open only: <strong>System Settings → Privacy &amp; Security → Open Anyway</strong>.</p>
+        <p class="note">Needs <a href="https://nodejs.org">Node 24+</a>, <a href="https://www.google.com/chrome">Google Chrome</a> and the <a href="https://claude.com/claude-code">Claude Code CLI</a> signed in.</p>
+      </div>
+      <div class="os" id="notes-win">
+        <p class="note"><strong>Windows.</strong> First open only: Windows asks once — <strong>More info → Run anyway</strong>.</p>
+        <p class="note">Needs <a href="https://nodejs.org">Node 24+</a>, <a href="https://git-scm.com">Git</a>, the <a href="https://claude.com/claude-code">Claude Code CLI</a> signed in, and Chrome or Edge.</p>
+      </div>
+    </div>
   </main>
 
-  <section class="terminal">
-    <p>Or paste this in Terminal:</p>
-    <div class="cmd">
-      <code id="cmd">curl -fsSL https://raw.githubusercontent.com/Dibakar01/alienx/main/install.sh | bash</code>
-      <button type="button" id="copy" aria-live="polite">Copy</button>
+  <section class="terminal" id="terminal">
+    <div class="os" id="cmd-mac">
+      <p>Or paste this in Terminal on a Mac:</p>
+      <div class="cmd">
+        <code>curl -fsSL https://raw.githubusercontent.com/Dibakar01/alienx/main/install.sh | bash</code>
+        <button type="button" aria-live="polite">Copy</button>
+      </div>
+    </div>
+    <div class="os" id="cmd-win">
+      <p>Or paste this in PowerShell on Windows:</p>
+      <div class="cmd">
+        <code>irm https://raw.githubusercontent.com/Dibakar01/alienx/main/install.ps1 | iex</code>
+        <button type="button" aria-live="polite">Copy</button>
+      </div>
     </div>
   </section>
 
@@ -157,18 +189,34 @@ footer { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: .9rem; color:
   </footer>
 </div>
 <script>
-// Copy button only. Falls back to selecting the line where the clipboard API is missing.
+// Copy buttons. Fall back to selecting the line where the clipboard API is missing.
 (function () {
-  var btn = document.getElementById("copy"), code = document.getElementById("cmd");
-  if (!btn || !code) return;
-  btn.addEventListener("click", function () {
-    var done = function () { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = "Copy"; }, 1600); };
-    var select = function () { var s = window.getSelection(); if (s) s.selectAllChildren(code); };
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code.textContent).then(done, select);
-      else select();
-    } catch (e) { select(); }
+  var cmds = document.querySelectorAll(".cmd");
+  Array.prototype.forEach.call(cmds, function (box) {
+    var btn = box.querySelector("button"), code = box.querySelector("code");
+    if (!btn || !code) return;
+    btn.addEventListener("click", function () {
+      var done = function () { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = "Copy"; }, 1600); };
+      var select = function () { var s = window.getSelection(); if (s) s.selectAllChildren(code); };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code.textContent).then(done, select);
+        else select();
+      } catch (e) { select(); }
+    });
   });
+})();
+// On Windows, put everything Windows first and make its button the red one. Mac stays first otherwise.
+(function () {
+  try {
+    var n = navigator, p = (n.userAgentData && n.userAgentData.platform) || n.platform || n.userAgent || "";
+    if (!/win/i.test(p)) return;
+    [["mac", "win"], ["notes-mac", "notes-win"], ["cmd-mac", "cmd-win"]].forEach(function (pair) {
+      var a = document.getElementById(pair[0]), b = document.getElementById(pair[1]);
+      if (a && b) a.parentNode.insertBefore(b, a);
+    });
+    document.getElementById("mac").classList.add("alt");
+    document.getElementById("win").classList.remove("alt");
+  } catch (e) {}
 })();
 </script>
 </body>

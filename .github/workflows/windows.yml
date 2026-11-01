@@ -1,0 +1,50 @@
+# Installs and runs alienX on a GitHub Windows machine the way a user would, so the Windows
+# scripts run somewhere real. No model calls: claude is a stub that only prints a version.
+name: windows
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+      - run: npm run build
+
+      # setup.ps1 and install.ps1 only check that claude is there and print its version.
+      - name: Stub claude on PATH
+        run: |
+          $bin = Join-Path $env:RUNNER_TEMP 'bin'
+          New-Item -ItemType Directory -Force $bin | Out-Null
+          Set-Content (Join-Path $bin 'claude.cmd') '@echo 0.0.0 (Claude Code stub for CI)'
+          Add-Content $env:GITHUB_PATH $bin
+
+      # Windows PowerShell 5.1, the one every Windows PC has. Started from cmd so harmless
+      # stderr (git, npm) is not turned into a failure; the script's exit code decides.
+      - name: Install, open, draw a picture with Edge, stop
+        shell: cmd
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\ci-windows.ps1
+
+      - name: Keep the picture and the logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-run
+          path: |
+            ${{ runner.temp }}/ci.png
+            ${{ runner.temp }}/alienX/data/logs
+          if-no-files-found: ignore

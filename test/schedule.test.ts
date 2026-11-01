@@ -34,11 +34,11 @@ test("the gap is kept across midnight and the weekend window is used", () => {
   assert.equal(ist(nextSlot("a", new Date("2026-11-02T06:50:00Z"), held, roomy).toISOString()), "2026-11-03 12:30"); // 13:00-13:45 sit inside the 3h gap
 });
 
-test("a post dropped on another day keeps its time there, or takes the next slot if that has passed", () => {
+test("a post dropped on another day keeps its time there; a day that is over is refused", () => {
   const now = new Date("2026-11-02T00:00:00Z");
   const current = at("2026-11-03", 13 * 60, "Asia/Kolkata").toISOString();
   assert.equal(ist(moveTo("a", current, "2026-11-05", now, [], cfg).toISOString()), "2026-11-05 13:00");
-  assert.equal(ist(moveTo("a", current, "2026-11-01", now, [], cfg).toISOString()), "2026-11-02 12:30");
+  assert.throws(() => moveTo("a", current, "2026-11-01", now, [], cfg), /That day has passed/);
 });
 
 test("a full week waits for the next one", () => {
@@ -53,11 +53,32 @@ test("a post earlier today still counts, so a second one waits for tomorrow", ()
   assert.equal(ist(nextSlot("a", new Date("2026-11-02T08:00:00Z"), earlier, cfg).toISOString()), "2026-11-03 12:30");
 });
 
-test("a drop on a day that already has its post is refused, not moved somewhere else", () => {
+test("a drop on a day that already has a post stays on that day, clear of the other post", () => {
   const now = new Date("2026-11-02T00:00:00Z");
   const current = at("2026-11-03", 13 * 60, "Asia/Kolkata").toISOString();
   const held = [at("2026-11-05", 12 * 60 + 45, "Asia/Kolkata").toISOString()];
-  assert.throws(() => moveTo("a", current, "2026-11-05", now, held, cfg), /already has its post/);
+  // A day that already has a post still takes a moved one; it shifts clear of the other post.
+  const moved = moveTo("a", current, "2026-11-05", now, held, cfg);
+  assert.equal(local(moved, "Asia/Kolkata").day, "2026-11-05");
+  assert.ok(Math.abs(moved.getTime() - Date.parse(held[0]!)) >= 180 * 60_000);
+});
+
+test("moving a post to today keeps it today, even when its time has passed and today has a post", () => {
+  // Sunday 1 Nov, 09:40 IST. The account already posts at 10:00 today; this post sat at 08:30 on Wednesday.
+  const now = new Date("2026-11-01T04:10:00Z");
+  const current = at("2026-11-04", 8 * 60 + 30, "Asia/Kolkata").toISOString();
+  const held = [at("2026-11-01", 10 * 60, "Asia/Kolkata").toISOString()];
+  const moved = moveTo("a", current, "2026-11-01", now, held, cfg);
+  assert.equal(local(moved, "Asia/Kolkata").day, "2026-11-01");
+  assert.ok(moved > now);
+  // Sunday's window is 18:00 to 19:00, and it is free: the moved post takes it.
+  assert.equal(ist(moved.toISOString()), "2026-11-01 18:00");
+});
+
+test("late at night today is refused with a clear reason", () => {
+  const now = new Date("2026-11-01T18:00:00Z"); // 23:30 IST
+  const current = at("2026-11-04", 13 * 60, "Asia/Kolkata").toISOString();
+  assert.throws(() => moveTo("a", current, "2026-11-01", now, [], cfg), /Too late for today/);
 });
 
 test("a tick notifies once for posts that came due, and the next tick stays quiet", () => {

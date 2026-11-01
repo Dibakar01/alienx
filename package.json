@@ -13,11 +13,11 @@
     "profile": "node --env-file-if-exists=.env scripts/profile.ts",
     "tick": "node --env-file-if-exists=.env scripts/tick.ts",
     "plan": "node --env-file-if-exists=.env scripts/plan.ts",
-    "setup": "bash scripts/setup.sh",
-    "local": "bash scripts/local.sh",
-    "open": "bash scripts/open.sh",
-    "stop": "bash scripts/stop.sh",
-    "app": "bash scripts/make-app.sh",
+    "setup": "node scripts/run.mjs setup",
+    "local": "node scripts/run.mjs local",
+    "open": "node scripts/run.mjs open",
+    "stop": "node scripts/run.mjs stop",
+    "app": "node scripts/run.mjs app",
     "download": "bash scripts/make-download.sh"
   },
   "dependencies": {

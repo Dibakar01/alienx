@@ -2,6 +2,7 @@
 # Builds docs/download/alienX.zip for the website's "Download for Mac" button: one
 # double-clickable alienX.command, wearing the alien icon, that runs install.sh. Needs
 # Google Chrome to draw the icon (same drawing as scripts/make-app.sh). Safe to re-run.
+# Also builds docs/download/alienX-windows.zip for "Download for Windows" (see below).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 out=docs/download/alienX.zip
@@ -19,6 +20,28 @@ curl -fsSL https://raw.githubusercontent.com/Dibakar01/alienx/main/install.sh | 
   { echo; read -r -n1 -p "Something went wrong (see above). Press any key to close."; exit 1; }
 SH
 chmod +x "$cmd"
+
+# The Windows download: docs/download/alienX-windows.zip, one "Install alienX.cmd" that runs
+# install.ps1. Windows wants CRLF line endings in a .cmd, so awk adds the \r.
+win="$tmp/win/Install alienX.cmd"
+mkdir -p "$tmp/win"
+awk '{ printf "%s\r\n", $0 }' > "$win" <<'CMD'
+@echo off
+REM Installs alienX into %USERPROFILE%\alienX and opens it. Run it again any time to update.
+REM It runs alienX's install script, which you can read first at
+REM https://github.com/Dibakar01/alienx/blob/main/install.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/Dibakar01/alienx/main/install.ps1 | iex"
+if errorlevel 1 (
+  echo.
+  echo Something went wrong ^(see above^).
+  pause
+  exit /b 1
+)
+CMD
+mkdir -p docs/download
+rm -f docs/download/alienX-windows.zip
+zip -q -j -X docs/download/alienX-windows.zip "$win"
+echo "Built docs/download/alienX-windows.zip ($(du -h docs/download/alienX-windows.zip | cut -f1 | tr -d ' '))"
 
 # The alien icon, drawn by headless Chrome from the brand mark.
 chrome=${CHROME_BIN:-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"}

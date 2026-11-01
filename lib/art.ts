@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { z } from "zod";
 
 import { ICON_NAMES, ICONS, type Icon } from "./icons.ts";
+import { chromePath, pngSize } from "./platform.ts";
 
 // The visual hook for an X post: one 1600x900 SVG, a full-bleed analogue collage in the One
 // Flow mixed-media style. A coloured ground, torn paper blocks, a big halftone cut-out that runs
@@ -898,14 +899,16 @@ export function renderArt(spec: ArtSpec): string {
 
 const run = promisify(execFile);
 
-// SVG to a 1600x900 PNG with headless Chrome, checked with sips.
+// SVG to a 1600x900 PNG with headless Chrome (or Edge on Windows), size read from the PNG.
 export async function rasterize(svgPath: string, pngPath: string): Promise<void> {
+  const chrome = chromePath();
+  if (!chrome) throw new Error("Found no Chrome or Edge to draw the picture. Install Chrome, or set CHROME_BIN to its path.");
   const png = path.resolve(pngPath);
   await fs.promises.rm(png, { force: true }); // a stale PNG must not pass the size check
   const profile = await fs.promises.mkdtemp(path.join(os.tmpdir(), "alienx-chrome-"));
   try {
     await run(
-      process.env.CHROME_BIN ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      chrome,
       [
         "--headless",
         "--hide-scrollbars",
@@ -918,19 +921,18 @@ export async function rasterize(svgPath: string, pngPath: string): Promise<void>
         `--screenshot=${png}`,
         pathToFileURL(path.resolve(svgPath)).href,
       ],
-      { timeout: 60_000 },
+      { timeout: 60_000, windowsHide: true },
     );
   } finally {
     await fs.promises.rm(profile, { recursive: true, force: true });
   }
-  let size = "";
+  let size: ReturnType<typeof pngSize>;
   try {
-    size = (await run("sips", ["-g", "pixelWidth", "-g", "pixelHeight", png])).stdout;
+    size = pngSize(await fs.promises.readFile(png));
   } catch (e) {
     throw new Error(`Chrome left no readable PNG at ${png}: ${(e as Error).message}`);
   }
-  const w = /pixelWidth: (\d+)/.exec(size)?.[1], h = /pixelHeight: (\d+)/.exec(size)?.[1];
-  if (w !== "1600" || h !== "900") throw new Error(`${png} is ${w ?? "?"}x${h ?? "?"}, expected 1600x900. Check CHROME_BIN and the Chrome flags.`);
+  if (size?.width !== 1600 || size.height !== 900) throw new Error(`${png} is ${size ? `${size.width}x${size.height}` : "not a PNG"}, expected 1600x900. Check CHROME_BIN and the Chrome flags.`);
 }
 
 export function artPath(id: number | string, ext: "svg" | "png"): string {

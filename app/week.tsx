@@ -187,7 +187,8 @@ export function Week({
 
   const move = (p: Post, day: string, from: DOMRect) => {
     if (day === dayOf(p)) return;
-    // Keeps its time of day on the new day; the server picks the next free slot if that has passed.
+    if (day < today) return say("A day that has passed can't take a post. Drop it on today or later.");
+    // Keeps its time of day on the new day; if that has passed, the server finds the nearest free moment that day.
     const guess = at(day, minuteOf(p), ZONE).toISOString();
     flights.set(p.id, from);
     setMoved((m) => ({ ...m, [p.id]: guess }));

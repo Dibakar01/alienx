@@ -11,8 +11,8 @@ echo "Checking what alienX needs:"
 node_major=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)
 if [ "$node_major" -ge 24 ]; then ok "Node $(node -v)"; else no "Node 24 or newer (https://nodejs.org). Found: $(node -v 2>/dev/null || echo none)"; fi
 if command -v claude >/dev/null 2>&1; then ok "Claude Code CLI $(claude --version 2>/dev/null | head -1)"; else no "Claude Code CLI: install it (https://claude.com/claude-code), then run \`claude\` once and sign in with your Claude plan"; fi
-chrome=${CHROME_BIN:-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"}
-if [ -x "$chrome" ]; then ok "Google Chrome (draws the post images)"; else no "Google Chrome in /Applications (https://www.google.com/chrome), or set CHROME_BIN"; fi
+chrome=$(node --input-type=module -e "const m = await import('./lib/platform.ts'); process.stdout.write(m.chromePath() ?? '')" 2>/dev/null || true)
+if [ -n "$chrome" ] && [ -x "$chrome" ]; then ok "Google Chrome (draws the post images)"; else no "Google Chrome in /Applications (https://www.google.com/chrome), or set CHROME_BIN"; fi
 [ "$missing" = 0 ] || { echo; echo "Install what is missing above, then run npm run setup again."; exit 1; }
 
 echo; echo "Installing packages:"

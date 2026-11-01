@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import shared from "../config/slots.json" with { type: "json" };
 import { claimDue, type Post } from "./db.ts";
 import { readLocal } from "./local.ts";
+import { notifyCommand } from "./platform.ts";
 import { at, local } from "./time.ts";
 
 export { at, local };
@@ -61,24 +62,43 @@ export function nextSlot(handle: string, from: Date, taken: string[], cfg: Slots
   throw new Error(`No free slot for @${handle} in the next 14 days. Loosen its windows under "slots" in config/local.json, or the default in config/slots.json.`);
 }
 
-// A post dropped on another day keeps its time of day there. If that moment has passed it
-// takes the next free slot instead; if that day or week is already full, the move is refused.
+// A post moved to a day by hand stays on that day: the person chose it, so the cadence caps
+// (one a day, so many a week) are for alienX's own booking only. It keeps its time of day if
+// that is still ahead and clear of the account's other posts; otherwise it takes the free
+// moment that day nearest to that time, preferring the account's windows, between 08:00 and
+// 23:00. A day that is over, or has no moment far enough from the other posts, is refused.
 export function moveTo(handle: string, current: string, day: string, now: Date, taken: string[], cfg: Slots = slots): Date {
-  const t = at(day, local(new Date(current), cfg.zone).minutes, cfg.zone);
-  if (t <= now) return nextSlot(handle, now, taken, cfg);
-  const why = full(t, taken.map((s) => new Date(s)), rules(handle, cfg), cfg.zone);
-  if (why) throw new Error(why);
-  return t;
+  const r = rules(handle, cfg);
+  const held = taken.map((s) => new Date(s).getTime());
+  const free = (t: number) => !held.some((h) => Math.abs(h - t) < r.gap_min * MIN);
+  const wanted = at(day, local(new Date(current), cfg.zone).minutes, cfg.zone).getTime();
+  const end = at(day, 23 * 60, cfg.zone).getTime();
+  if (end <= now.getTime()) throw new Error(day === local(now, cfg.zone).day ? "Too late for today. Pick tomorrow or later." : "That day has passed. Pick today or later.");
+  if (wanted > now.getTime() && free(wanted)) return new Date(wanted);
+  const step = cfg.step_min * MIN;
+  const target = Math.max(wanted, now.getTime());
+  let best: number | undefined;
+  let bestScore = Infinity;
+  for (let t = Math.max(at(day, 8 * 60, cfg.zone).getTime(), Math.ceil(now.getTime() / step) * step); t <= end; t += step) {
+    if (!free(t)) continue;
+    const when = local(new Date(t), cfg.zone);
+    const inWindow = (when.weekend ? r.weekend : r.weekday).some(([a, b]) => when.minutes >= hm(a!) && when.minutes < hm(b!));
+    const score = (inWindow ? 0 : DAY) + Math.abs(t - target);
+    if (score < bestScore) [best, bestScore] = [t, score];
+  }
+  if (best === undefined) throw new Error("No room that day: every free moment is too close to another post.");
+  return new Date(best);
 }
 
-export function osascript(message: string): void {
-  // JSON string quoting is also valid AppleScript string quoting.
-  execFile("osascript", ["-e", `display notification ${JSON.stringify(message)} with title "alienX" sound name "Glass"`], () => {});
+// A desktop notification on Mac or Windows. A failed one is ignored.
+export function notify(message: string): void {
+  const c = notifyCommand(message);
+  if (c) execFile(c.cmd, c.args, { windowsHide: true }, () => {});
 }
 
 // One pass: every post whose slot has come turns due, and one notification names them.
-export function tick(now: Date = new Date(), notify: (message: string) => void = osascript): Post[] {
+export function tick(now: Date = new Date(), alert: (message: string) => void = notify): Post[] {
   const due = claimDue(now.toISOString());
-  if (due.length) notify(`${due.length === 1 ? "A post is" : `${due.length} posts are`} due: ${[...new Set(due.map((p) => `@${p.handle}`))].join(", ")}. Open alienX to post.`);
+  if (due.length) alert(`${due.length === 1 ? "A post is" : `${due.length} posts are`} due: ${[...new Set(due.map((p) => `@${p.handle}`))].join(", ")}. Open alienX to post.`);
   return due;
 }

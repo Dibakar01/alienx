@@ -6,7 +6,7 @@ import { ArtSpec, artPath, rasterize, renderArt } from "./art.ts";
 import { createPost, getPost, getTopic, listPosts, listTopics, type Post, saveTopics, setTopic, takenSlots, type Topic, updatePost } from "./db.ts";
 import { ANGLES, facts, generate, voice } from "./generate.ts";
 import { ask, prompt } from "./llm.ts";
-import { local, nextSlot, osascript, rules, zone } from "./schedule.ts";
+import { local, nextSlot, notify, rules, zone } from "./schedule.ts";
 import { fit, liked, taste } from "./taste.ts";
 import { addDays } from "./time.ts";
 
@@ -192,7 +192,7 @@ export async function daily(only?: string): Promise<number> {
       console.error(`@${handle}: no pick today (${e instanceof Error ? e.message : e})`);
     }
   }
-  if (failed) osascript(`alienX could not choose today's pick for ${failed === 1 ? "1 account" : `${failed} accounts`}. Open Create to pick one.`);
+  if (failed) notify(`alienX could not choose today's pick for ${failed === 1 ? "1 account" : `${failed} accounts`}. Open Create to pick one.`);
   return failed;
 }
 
@@ -217,6 +217,6 @@ export async function plan(opts: { only?: string; researchOnly?: boolean } = {})
     }
   }
   // Nobody watches the Sunday run, so a failure says so on screen, not only in the log.
-  if (failed.length) osascript(`The weekly plan stopped for ${failed.length === 1 ? "1 account" : `${failed.length} accounts`}. ${failed[0]!.slice(0, 160)}`);
+  if (failed.length) notify(`The weekly plan stopped for ${failed.length === 1 ? "1 account" : `${failed.length} accounts`}. ${failed[0]!.slice(0, 160)}`);
   return failed.length;
 }
