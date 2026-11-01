@@ -10,7 +10,8 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "alienx-backup-"));
 process.env.ALIENX_DB = path.join(tmp, "alienx.db");
 const { backup, createPost, getPost } = await import("../lib/db.ts");
 
-test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+// Windows can't delete the database while this process still has it open; the temp folder is left for the OS.
+test.after(() => { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {} });
 
 test("the daily backup is a whole copy, one a day, and keeps the newest 7", async () => {
   const dir = path.join(tmp, "backups");
