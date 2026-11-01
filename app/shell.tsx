@@ -14,6 +14,7 @@ import { Avatar } from "./avatar.tsx";
 import Dock from "./bits/Dock.tsx";
 import { Mascot } from "./mascot.tsx";
 import { Profiles } from "./profiles.tsx";
+import { local, ZONE } from "../lib/time.ts";
 import { ThemeIcon, useTheme } from "./theme.tsx";
 import { Studio } from "./studio.tsx";
 import { Week } from "./week.tsx";
@@ -137,7 +138,7 @@ export function Shell({
   useEffect(() => {
     if (!profile || managing.current) return;
     const nowIso = new Date().toISOString();
-    const today = nowIso.slice(0, 10);
+    const today = local(new Date(), ZONE).day; // India's day, so "once a day" turns over at midnight there
     const key = (h: string) => `alienx.manage.${h}`;
     const stamp = (h: string) => {
       try {

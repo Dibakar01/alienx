@@ -32,6 +32,7 @@ export function Ideas({
   composer,
   onTeach,
   onHere,
+  beside = false,
 }: {
   accounts: AccountInfo[];
   topics: Topic[];
@@ -51,6 +52,8 @@ export function Ideas({
   onTeach: () => void;
   // Told whether the discover card, with its progress, is the card in front.
   onHere?: (w: Where[]) => void;
+  // Drafts are open beside the ideas, with their own way back: the composer's link stays out.
+  beside?: boolean;
 }) {
   const router = useRouter();
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -114,6 +117,8 @@ export function Ideas({
       const best0 = el.children[best] as HTMLElement;
       if (Math.abs(box.offsetTop + box.offsetHeight / 2 - mid) < Math.abs(best0.offsetTop + best0.offsetHeight / 2 - mid)) best = i;
     });
+    // Scrolled to the bottom: the last card is in front, even if it cannot reach the middle.
+    if (el.scrollTop > 0 && el.scrollTop + el.clientHeight >= el.scrollHeight - 2) best = cards - 1;
     setAt(best);
   };
   const go = (i: number) => {
@@ -191,7 +196,7 @@ export function Ideas({
       {/* Your own words: one slim line until you want it. */}
       {writing || !deck.length ? (
         <div className="page-in grid gap-2">
-          {deck.length > 0 && (
+          {deck.length > 0 && !beside && (
             <button type="button" className="link justify-self-start text-sm text-muted" onClick={() => (setWriting(false), setAt(0))}>
               ← Back to ideas
             </button>
@@ -229,7 +234,7 @@ export function Ideas({
               // From inside a card, focus follows to the card coming in, so Enter and Tab act on it.
               if (e.target !== e.currentTarget) (el?.querySelector("button") ?? track.current)?.focus({ preventScroll: true });
             }}
-            className="deck flex min-h-0 flex-1 snap-y snap-mandatory flex-col items-center gap-5 overflow-x-hidden overflow-y-auto px-2 py-[6%] outline-none [scrollbar-width:none] focus-visible:ring-2 focus-visible:ring-brand/50"
+            className="deck flex min-h-0 flex-1 snap-y snap-mandatory flex-col items-center gap-5 overflow-x-hidden overflow-y-auto px-2 outline-none before:h-[calc(21%-1.25rem)] before:shrink-0 after:h-[calc(21%-1.25rem)] after:shrink-0 [scrollbar-width:none] focus-visible:ring-2 focus-visible:ring-brand/50"
           >
             {deck.map((t, i) => {
               const top = t === pick;
@@ -270,7 +275,7 @@ export function Ideas({
                     >
                       {busy[t.handle] && active === t.id ? "Drafting…" : active === t.id || tried.includes(t.id) ? "Draft again" : "Draft it"}
                     </button>
-                    <button type="button" className="btn px-4 py-3 text-base" disabled={flicking === t.id} onClick={() => skip(t)} aria-label={`Skip: ${t.title}`}>
+                    <button type="button" className="btn px-4 py-3 text-base" disabled={flicking === t.id || (busy[t.handle] && active === t.id)} onClick={() => skip(t)} aria-label={`Skip: ${t.title}`}>
                       Skip
                     </button>
                   </div>
@@ -322,7 +327,7 @@ export function Ideas({
                 <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 15l6-6 6 6" /></svg>
               </button>
               {cards > 9 ? (
-                <span className="text-center text-xs leading-tight font-semibold text-snow-muted tabular-nums" aria-live="polite">
+                <span className="text-center text-xs leading-tight font-semibold text-muted tabular-nums" aria-live="polite">
                   {at + 1}
                   <br />
                   <span className="opacity-60">{cards}</span>
@@ -335,7 +340,7 @@ export function Ideas({
                       type="button"
                       tabIndex={-1}
                       onClick={() => go(i)}
-                      className={`w-1.5 rounded-full transition-[height,background-color] duration-300 [transition-timing-function:var(--spring)] ${i === at ? "h-6 bg-brand" : "h-1.5 bg-snow-muted/50"}`}
+                      className={`w-1.5 rounded-full transition-[height,background-color] duration-300 [transition-timing-function:var(--spring)] ${i === at ? "h-6 bg-brand" : "h-1.5 bg-strong"}`}
                     />
                   ))}
                 </span>

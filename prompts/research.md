@@ -13,7 +13,7 @@ Second, propose exactly {{count}} topics for this account. A topic is one thing 
 - a pillar taken only from the account's pillar list (leave it out if none fits);
 - one angle (story, contrarian, observation, lesson or question);
 - why it matters now: the trend or moment it rides, and why this account in particular should say something about it;
-- the takeaway: the value a reader leaves with. A fact they did not know, an insight that reframes the trend, a practical lesson, or a question that sharpens their own thinking. A topic with no takeaway is not a topic;
+- the takeaway: the value a reader leaves with. A fact they did not know, an insight that reframes the trend, a practical lesson, or a question that sharpens their own thinking. A topic with no takeaway is not a topic. Written to the reader; never a note to the writer or a drafting instruction;
 - the indices of the findings it rests on.
 
 Mix it up. The week's topics must not all be the same kind. Across them, cover different kinds from this list, never two of the same kind when there are three or fewer topics:

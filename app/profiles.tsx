@@ -163,7 +163,7 @@ export function Profiles({
             </li>
           ))}
         </ol>
-        <p className="text-sm text-snow-faint">Runs on your Mac. Free with your Claude plan.</p>
+        <p className="text-sm text-snow-faint">Runs on your computer. Free with your Claude plan.</p>
       </section>
 
       <main className="grid place-items-center">

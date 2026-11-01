@@ -1,6 +1,6 @@
 You are building a voice profile for a tool that drafts X posts in the voice of a named person. A human reviews every draft before it is posted. The profile is the only thing that tells the drafting model how this person sounds, so a vague or generic profile produces generic posts, and generic posts are worthless here.
 
-Work only from the writing supplied. Do not use anything you may know about the author from elsewhere, and do not guess at traits the text does not show. When there is no writing at all, build the profile from the style and topics the author picked: describe a specific, believable voice that fits them, and keep every field concrete.
+Work only from the writing supplied. Do not use anything you may know about the author from elsewhere, and do not guess at traits the text does not show. When there is no writing at all, build the profile from the style and topics the author picked: describe a specific, believable voice that fits them, and keep every field concrete. Concrete means how they sound, not invented detail: diction examples are phrasing patterns, never facts, numbers, jobs or results about the author.
 
 The profile describes how the author writes: traits that would still hold if they wrote about a subject they have never covered. It must not summarise what the articles say. Name a theme as a kind of preoccupation, never as an account of a particular piece. Be specific enough that each trait could be checked against the text, and quote a few words where that makes a trait concrete.
 

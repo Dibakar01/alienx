@@ -36,7 +36,8 @@ const ANGLES: Record<string, string> = {
   question: "a real question",
 };
 const STORE = "alienx.accounts";
-// Suggestions set aside with Not now, remembered for the day.
+// The thought being typed, kept per profile so a reload does not lose it.
+const THOUGHT = "alienx.thought.";
 
 // A laptop-wide screen (Tailwind's lg), where the ideas stay beside open drafts.
 const WIDE = "(min-width: 64rem)";
@@ -115,17 +116,33 @@ export function Studio({
   const viewRef = useRef("");
   const seen = useRef(start?.at);
 
-  // Come back to the accounts used last time.
+  // Come back to the accounts used last time. Accounts can arrive after the page opens (just
+  // signed up), so this waits for the first ready one.
+  const anyReady = ready.length > 0;
   useEffect(() => {
+    if (!anyReady) return;
     try {
       // The single account remembered by the earlier page counts too.
       const saved: unknown = JSON.parse(localStorage.getItem(STORE) ?? JSON.stringify([localStorage.getItem("alienx.account")]));
-      if (Array.isArray(saved) && saved.some((h) => ready.some((a) => a.handle === h))) setChosen(saved.filter((h) => typeof h === "string"));
+      if (Array.isArray(saved) && saved.some((h) => ready.some((a) => a.handle === h))) return setChosen(saved.filter((h) => typeof h === "string"));
     } catch {
       // No storage, no memory. The first account is fine.
     }
-    // Only on first load: a refreshed account list is not a reason to switch back.
-  }, []);
+    setChosen((c) => (c.length ? c : [ready[0]!.handle]));
+    // Only once there are accounts: a refreshed account list is not a reason to switch back.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anyReady]);
+
+  // The thought typed last time on this profile comes back, unless something is already typed.
+  const thoughtKey = THOUGHT + (accounts.length === 1 ? accounts[0]!.handle : "all");
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(thoughtKey);
+      if (saved) setSeed((s) => s || saved);
+    } catch {
+      // No storage: the box starts empty.
+    }
+  }, [thoughtKey]);
 
   useEffect(() => {
     if (!focus.n) return;
@@ -133,8 +150,9 @@ export function Studio({
     else document.getElementById("alienx-pick")?.focus();
   }, [focus]);
 
-  // Chosen accounts in the order they are listed, voiceless ones left out.
-  const picking = ready.filter((a) => chosen.includes(a.handle)).map((a) => a.handle);
+  // Chosen accounts in the order they are listed, voiceless ones left out. A single account has
+  // no picker, so its voice is always the one writing.
+  const picking = (accounts.length === 1 ? ready : ready.filter((a) => chosen.includes(a.handle))).map((a) => a.handle);
   const askFor = (h: string) => JSON.stringify([seed.trim(), format, pillarOf[h] ?? "", hashtags]);
   const working = Object.values(busy).some(Boolean);
   const pickingBusy = picking.some((h) => busy[h]);
@@ -242,6 +260,12 @@ export function Studio({
             const rec = recommend(result.drafts, allow, fromIdea?.angle);
             setSets((s) => ({ ...s, [h]: { drafts: result.drafts, allow, asked, topicId: fromIdea?.id, rec } }));
             if (rec && viewRef.current === h) setAngle(rec.angle);
+            // Your own words became drafts: the kept copy can go, unless it was changed since.
+            try {
+              if (!from && localStorage.getItem(thoughtKey) === text) localStorage.removeItem(thoughtKey);
+            } catch {
+              // Nothing kept.
+            }
           }
           setBusy((b) => ({ ...b, [h]: false }));
         });
@@ -358,6 +382,12 @@ export function Studio({
         onChange={(e) => {
           setSeed(e.target.value);
           setNudge(false);
+          try {
+            if (e.target.value.trim()) localStorage.setItem(thoughtKey, e.target.value);
+            else localStorage.removeItem(thoughtKey);
+          } catch {
+            // Nothing to keep it in.
+          }
         }}
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -413,7 +443,8 @@ export function Studio({
   return (
     <div className="grid h-full grid-rows-[auto_1fr] gap-y-2 p-2 pb-24 sm:p-3 sm:pb-24 lg:gap-y-4 lg:px-8 lg:pt-5">
       <header className="flex min-w-0 items-center gap-3 pr-14 sm:gap-4">
-        <button type="button" onClick={onAbout} aria-label="About alienX" className="shrink-0 rounded-full">
+        {/* The padding makes a 44px target; the negative margin keeps the header where it was. */}
+        <button type="button" onClick={onAbout} aria-label="About alienX" className="-m-1.5 shrink-0 rounded-full p-1.5">
           <Mascot blink={working} className="size-8 text-brand" />
         </button>
         <div className="min-w-0">
@@ -447,6 +478,7 @@ export function Studio({
             composer={composer}
             onTeach={() => openUpkeep("posts", accounts[0]!.handle)}
             onHere={setIdeasHere}
+            beside={open}
           />
         </section>
 
@@ -646,8 +678,8 @@ function Card({
       navigator.vibrate?.(12); // a small knock on phones, as the stamp lands
       setStatus("approved");
       onDecided("approved");
-      // The finished picture's View goes to the calendar, where the approved post now lives.
-      const d = draw(result.post.id, draft.handle, "week");
+      // The picture draws right here on the card, so the activity card leaves it out while the drafts show.
+      const d = draw(result.post.id, draft.handle, "drafts");
       setDrawing(d.since);
       void d.done.then((p) => {
         setDrawing(0);

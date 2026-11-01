@@ -40,6 +40,11 @@ const minutes = (hhmm: string) => {
   return h * 60 + m;
 };
 const hourLabel = (h: number) => `${h % 12 || 12} ${h < 12 || h === 24 ? "am" : "pm"}`;
+// "18:30" as the cards print it: "6:30 pm".
+const slotLabel = (hhmm: string) => {
+  const [h, m] = hhmm.split(":") as [string, string];
+  return `${Number(h) % 12 || 12}:${m} ${Number(h) < 12 ? "am" : "pm"}`;
+};
 const short = (day: string) => dayName(day, { day: "numeric", month: "short" });
 
 // Cards that would overlap on a day are dealt into lanes; each lane steps a little to the right
@@ -275,7 +280,7 @@ export function Week({
   return (
     <div className="mx-auto grid h-full w-full max-w-7xl grid-rows-[auto_auto_minmax(0,1fr)] gap-2 p-2 pb-24 sm:gap-3 sm:p-3 sm:pb-24 lg:px-8 lg:pt-5">
       <header className="flex flex-wrap items-center gap-x-4 gap-y-2 sm:pr-14">
-        <button type="button" onClick={onAbout} aria-label="About alienX" className="rounded-full">
+        <button type="button" onClick={onAbout} aria-label="About alienX" className="-m-1.5 rounded-full p-1.5">
           <Mascot className="size-8 text-brand" />
         </button>
         <div className="min-w-0">
@@ -455,7 +460,7 @@ export function Week({
                       ].map(([s, names]) => (
                         // Just the time: the band's shading already says it is open.
                         <span key={s} aria-hidden="true" data-for={names.join(",")} className="pointer-events-none absolute inset-x-0 truncate px-1 pt-0.5 text-[10px] leading-tight text-muted" style={{ top: y(minutes(s)) }}>
-                          {s}
+                          {slotLabel(s)}
                         </span>
                       ))}
 
@@ -539,11 +544,22 @@ export function Week({
         onClose={() => setOpen(null)}
         onKill={kill}
         onSaved={(text, undo) => say(text, undo)}
-        onChanged={(p) => setOpen((o) => (o?.id === p.id ? p : o))}
+        onChanged={(p) => {
+          setOpen((o) => (o?.id === p.id ? p : o));
+          router.refresh(); // the card behind the dialog shows the new picture now, not at the next refresh
+        }}
       />
 
       {toast && (
-        <div role="status" className="rise fixed bottom-24 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-card bg-panel px-4 py-2.5 text-sm text-snow shadow-object">
+        // A manual popover joins the top layer, so the toast shows above the open post dialog too.
+        <div
+          role="status"
+          popover="manual"
+          ref={(el) => {
+            if (el?.showPopover && !el.matches(":popover-open")) el.showPopover();
+          }}
+          className="rise fixed inset-auto bottom-24 left-1/2 z-40 m-0 flex -translate-x-1/2 items-center gap-3 rounded-card border-0 bg-panel px-4 py-2.5 text-sm text-snow shadow-object"
+        >
           <span>{toast.text}</span>
           {toast.undo && (
             <button type="button" className="font-semibold text-snow underline underline-offset-4" onClick={toast.undo}>

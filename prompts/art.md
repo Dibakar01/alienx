@@ -112,6 +112,8 @@ Fields:
 - stamp: optional, ONE word, at most 10 characters, pressed onto the main object as a red rubber stamp.
 - seed: any whole number from 1 to 99999. It only varies the colours, tears, tilts and which side the words sit on.
 
+When an earlier picture is given, the person asked for a new one: make it clearly different, with another headline, other objects and another composition, and a different seed.
+
 =====
 
 Account: @{{handle}}
@@ -119,3 +121,7 @@ Account: @{{handle}}
 <post>
 {{posts}}
 </post>
+
+<earlier_picture>
+{{earlier}}
+</earlier_picture>

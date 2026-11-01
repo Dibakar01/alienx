@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 process.env.ALIENX_DB = ":memory:";
-const { claimDue, createPost, decide, listPosts, saveDrafts, takenSlots, updatePost } = await import("../lib/db.ts");
+const { claimDue, createPost, decide, getPost, listPosts, saveDrafts, takenSlots, updatePost } = await import("../lib/db.ts");
 
 const post = (handle: string, scheduled_at: string) =>
   createPost({ handle, posts: ["hello"], claims: [], source: "seed", scheduled_at });
@@ -40,4 +40,16 @@ test("a post alienX booked itself is its pick until someone approves the draft",
   assert.equal(week().find((x) => x.id === mine.id)?.picked, 0);
   decide(d!.id, "approved", ["hi"]);
   assert.equal(week().find((x) => x.id === p.id)?.picked, 0);
+});
+
+test("getPost and updatePost keep the calendar tags listPosts shows", () => {
+  const [d] = saveDrafts({ handle: "acme_studio", seed: "idea", format: "single" }, [{ angle: "story", posts: ["hi"], claims: [] }]);
+  const p = createPost({ handle: "acme_studio", draft_id: d!.id, posts: ["hi"], claims: [], source: "plan", scheduled_at: "2026-11-07T08:00:00.000Z" });
+  const changed = updatePost(p.id, { posts: ["hello"] });
+  assert.equal(changed.picked, 1);
+  assert.equal(changed.angle, "story");
+  assert.deepEqual(changed.posts, ["hello"]);
+  assert.equal(getPost(p.id).picked, 1);
+  assert.equal(getPost(p.id).angle, "story");
+  assert.throws(() => updatePost(999999, { status: "killed" }), /No post/);
 });

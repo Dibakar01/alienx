@@ -33,8 +33,12 @@ const Research = z.object({
 // one and can be remade.
 export async function makeArt(postId: number): Promise<Post> {
   const post = getPost(postId);
-  const p = prompt("art", { handle: post.handle, posts: post.posts.join("\n\n") });
+  // Drawing again: the model sees the picture it made before, so the new one differs.
+  const before = post.art && typeof post.art === "object" && "headline" in post.art ? JSON.stringify(post.art) : "(none: this is the first picture)";
+  const p = prompt("art", { handle: post.handle, posts: post.posts.join("\n\n"), earlier: before });
   const spec = await ask(ArtSpec, p.system, p.user);
+  // A repeated seed would keep the same image address, and the browser its cached picture.
+  if ((post.art as { seed?: number } | null)?.seed === spec.seed) spec.seed = (spec.seed % 99999) + 1;
   const svg = artPath(post.id, "svg");
   fs.mkdirSync(path.dirname(svg), { recursive: true });
   fs.writeFileSync(svg, renderArt(spec));

@@ -252,11 +252,11 @@ export function PostDetail({
       ref={ref}
       onClose={onClose}
       aria-labelledby="post-title"
-      className="m-auto w-[min(60rem,calc(100%-1.5rem))] overflow-visible bg-transparent p-0 text-ink"
+      className="m-auto w-[min(60rem,calc(100%-1.5rem))] overflow-visible bg-transparent p-0 text-ink outline-none"
     >
       {/* The torn sheet is a wrapper: a dialog must keep its own positioning. */}
       <div className="sheet sheet-c tape">
-      <div className="grid max-h-[calc(100dvh-1.5rem)] gap-4 overflow-y-auto p-4 sm:p-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-6">
+      <div className="grid max-h-[calc(100dvh-1.5rem)] gap-4 overflow-y-auto p-4 outline-none sm:p-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-6">
         <div className="flex items-baseline justify-between gap-4 lg:col-span-2">
           <div className="min-w-0">
             <h2 id="post-title" className="text-xl leading-tight font-bold tracking-[-0.022em]">
@@ -400,7 +400,7 @@ export function PostDetail({
               <>
                 <Step n={number("post")} state={stateOf("post")} title="Post to X" hint="One tap opens X with the words, and the image comes with them.">
                   <div className="flex flex-wrap items-center gap-2">
-                    <PostButton post={post} text={text} art={art} disabled={tooLong || dirty} quiet={stateOf("post") !== "now"} onSent={() => setSent(true)} />
+                    <PostButton post={post} text={text} art={art} disabled={tooLong || dirty || drawing > 0} quiet={stateOf("post") !== "now"} onSent={() => setSent(true)} />
                     {/* The first reply, right beside Post: no going back to find it. */}
                     {sent && sources.length > 0 && (
                       <button type="button" className={`btn ${replied ? "" : "btn-dark"}`} onClick={copyReply}>
@@ -595,7 +595,7 @@ function PostButton({ post, text, art, disabled, quiet, onSent }: { post: Post; 
         Post to X
       </button>
       {note && (
-        <p role="status" className="basis-full text-sm text-muted">
+        <p role="status" className="order-last basis-full text-sm text-muted">
           {note}
         </p>
       )}
@@ -640,7 +640,7 @@ function PostButton({ post, text, art, disabled, quiet, onSent }: { post: Post; 
         </button>
       )}
       {note && (
-        <p role="status" className="basis-full text-sm text-muted">
+        <p role="status" className="order-last basis-full text-sm text-muted">
           {note}
         </p>
       )}

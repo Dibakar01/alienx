@@ -9,7 +9,17 @@ $url = "http://127.0.0.1:$port"
 # Is something answering on the port? (A refused local connect takes Windows ~2s, hence the 1s cap.)
 function Test-Up { try { $c = New-Object Net.Sockets.TcpClient; $up = $c.ConnectAsync('127.0.0.1', [int]$port).Wait(1000); $c.Close(); $up } catch { $false } }
 
-if (-not (Test-Up)) {
+$up = Test-Up
+if ($up) {
+  # Something answers on the port; only open it if it is alienX.
+  $body = ''
+  try { $body = [string](Invoke-WebRequest $url -UseBasicParsing -TimeoutSec 10).Content } catch {}
+  if ($body -cnotlike '*alienX*') {
+    Write-Host "Port $port is busy with another app. Close it, or set ALIENX_PORT to a free port."
+    exit 1
+  }
+}
+if (-not $up) {
   New-Item -ItemType Directory -Force data\logs | Out-Null
   # Rebuild when there is no build yet, or any code changed since the last one.
   $build = Get-Item .next\BUILD_ID -ErrorAction SilentlyContinue

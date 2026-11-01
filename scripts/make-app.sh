@@ -9,8 +9,9 @@ apps=${ALIENX_APPS:-$HOME/Applications}
 app="$apps/alienX.app"
 mkdir -p "$apps"
 
-# The app runs with a bare PATH, so it carries this shell's, where node, npx and claude live.
-script="do shell script \"export PATH=\" & quoted form of \"$PATH\" & \"; bash \" & quoted form of \"$root/scripts/open.sh\""
+# The app runs with a bare PATH, so it carries this shell's, where node, npx and claude live,
+# and the port alienX runs on.
+script="do shell script \"export PATH=\" & quoted form of \"$PATH\" & \" ALIENX_PORT=${ALIENX_PORT:-3000}; bash \" & quoted form of \"$root/scripts/open.sh\""
 osacompile -o "$app" -e "$script"
 
 # The alien as the app icon, drawn by Chrome from the brand mark (skipped if Chrome is missing).

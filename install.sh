@@ -9,7 +9,11 @@ home=${ALIENX_HOME:-$HOME/alienX}
 command -v git >/dev/null 2>&1 || { echo "First install Apple's command line tools:  xcode-select --install"; exit 1; }
 if [ -d "$home/.git" ]; then
   echo "Updating alienX in $home"
+  # Setup's npm install can rewrite the lockfile; drop that so the pull can fast-forward.
+  git -C "$home" checkout -- package-lock.json
   git -C "$home" pull --ff-only --quiet
+  # Stop a running alienX so open.sh rebuilds and serves the new code.
+  bash "$home/scripts/stop.sh" >/dev/null || true
 else
   echo "Downloading alienX to $home"
   git clone --quiet --depth 1 "$repo" "$home"

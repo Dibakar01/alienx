@@ -133,8 +133,13 @@ export function createPost(p: {
   return toPost(row as PostRow);
 }
 
+// A post with its calendar tags, so every read hands the dialog the same shape.
+const POST_SELECT = `SELECT ${POST_COLUMNS.split(", ").map((c) => `p.${c}`).join(", ")}, d.angle AS angle, COALESCE(d.pillar, t.pillar) AS pillar,
+              (p.source = 'plan' AND COALESCE(d.status, '') != 'approved') AS picked
+       FROM posts p LEFT JOIN drafts d ON d.id = p.draft_id LEFT JOIN topics t ON t.id = p.topic_id`;
+
 export function getPost(id: number): Post {
-  const row = db().prepare(`SELECT ${POST_COLUMNS} FROM posts WHERE id = ?`).get(id) as PostRow | undefined;
+  const row = db().prepare(`${POST_SELECT} WHERE p.id = ?`).get(id) as PostRow | undefined;
   if (!row) throw new Error(`No post with id ${id}`);
   return toPost(row);
 }
@@ -143,9 +148,7 @@ export function getPost(id: number): Post {
 export function listPosts(from: string, to: string): Post[] {
   const rows = db()
     .prepare(
-      `SELECT ${POST_COLUMNS.split(", ").map((c) => `p.${c}`).join(", ")}, d.angle AS angle, COALESCE(d.pillar, t.pillar) AS pillar,
-              (p.source = 'plan' AND COALESCE(d.status, '') != 'approved') AS picked
-       FROM posts p LEFT JOIN drafts d ON d.id = p.draft_id LEFT JOIN topics t ON t.id = p.topic_id
+      `${POST_SELECT}
        WHERE p.status != 'killed' AND ((p.scheduled_at >= ? AND p.scheduled_at < ?) OR p.status = 'due') ORDER BY p.scheduled_at`,
     )
     .all(from, to) as PostRow[];
@@ -173,11 +176,9 @@ export function updatePost(
     values.push(key === "posts" || key === "claims" || key === "art" ? JSON.stringify(value) : (value as string | null));
   }
   if (!sets.length) return getPost(id);
-  const row = db()
-    .prepare(`UPDATE posts SET ${sets.join(", ")} WHERE id = ? RETURNING ${POST_COLUMNS}`)
-    .get(...values, id) as PostRow | undefined;
-  if (!row) throw new Error(`No post with id ${id}`);
-  return toPost(row);
+  const { changes } = db().prepare(`UPDATE posts SET ${sets.join(", ")} WHERE id = ?`).run(...values, id);
+  if (!changes) throw new Error(`No post with id ${id}`);
+  return getPost(id);
 }
 
 // Moves every scheduled post whose slot has come to due, and returns exactly those. One

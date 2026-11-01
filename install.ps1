@@ -21,14 +21,21 @@ function Install-AlienX {
     throw 'Install what is missing above, then open a new PowerShell window and run the install line again.'
   }
 
-  if (Test-Path (Join-Path $home_ '.git')) {
+  $update = Test-Path (Join-Path $home_ '.git')
+  if ($update) {
     Write-Host "Updating alienX in $home_"
-    & git -C $home_ pull --ff-only --quiet
+    # Setup's npm install can rewrite the lockfile; drop that so the pull can fast-forward.
+    & git -C $home_ checkout -- package-lock.json
+    if ($LASTEXITCODE -eq 0) { & git -C $home_ pull --ff-only --quiet }
   } else {
     Write-Host "Downloading alienX to $home_"
     & git clone --quiet --depth 1 $repo $home_
   }
   if ($LASTEXITCODE -ne 0) { throw 'git failed (see above).' }
+  # Stop a running alienX so open rebuilds and serves the new code. A failure here is fine.
+  if ($update) {
+    try { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $home_ 'scripts\stop.ps1') | Out-Null } catch {}
+  }
 
   foreach ($step in 'setup', 'make-shortcut', 'open') {
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $home_ "scripts\$step.ps1")

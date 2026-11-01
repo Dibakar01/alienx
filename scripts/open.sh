@@ -6,7 +6,13 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 port=${ALIENX_PORT:-3000}
 url=http://127.0.0.1:$port
-if ! curl -s -o /dev/null "$url"; then
+if body=$(curl -sL "$url"); then
+  # Something answers on the port; only open it if it is alienX.
+  if [[ $body != *alienX* ]]; then
+    echo "Port $port is busy with another app. Close it, or set ALIENX_PORT to a free port."
+    exit 1
+  fi
+else
   # Rebuild when there is no build yet, or any code changed since the last one.
   if [ ! -f .next/BUILD_ID ] || [ -n "$(find app lib prompts config proxy.ts package.json -newer .next/BUILD_ID 2>/dev/null | head -1)" ]; then
     echo "Building alienX…"

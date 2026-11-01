@@ -6,6 +6,12 @@
 <title>alienX</title>
 <meta name="description" content="alienX writes your X. You press post. A free app for Mac and Windows that runs on your Claude plan.">
 <meta name="color-scheme" content="dark light">
+<meta property="og:title" content="alienX">
+<meta property="og:description" content="alienX writes your X. You press post. Free for Mac and Windows, on your Claude plan.">
+<meta property="og:image" content="https://dibakar01.github.io/alienx/social-preview.png">
+<meta property="og:url" content="https://dibakar01.github.io/alienx/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://dibakar01.github.io/alienx/social-preview.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cmask id='m'%3E%3Cpath d='M12 2C17.6 2 21 5.4 21 10C21 15.6 16.4 22 12 22C7.6 22 3 15.6 3 10C3 5.4 6.4 2 12 2Z' fill='white'/%3E%3Cpath d='M5.2 9Q9.95 9.12 10.8 13.8Q6.05 13.68 5.2 9Z'/%3E%3Cpath d='M18.8 9Q14.05 9.12 13.2 13.8Q17.95 13.68 18.8 9Z'/%3E%3C/mask%3E%3Crect width='24' height='24' fill='%23D92819' mask='url(%23m)'/%3E%3C/svg%3E">
 <style>
 /* One Flow scrapbook, from app/globals.css: torn paper sheets with tape on a dark ground,
@@ -145,7 +151,7 @@ footer { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: .9rem; color:
 
     <ol class="steps" aria-label="After downloading">
       <li><b>1</b>Open the zip</li>
-      <li><b>2</b>Double-click alienX</li>
+      <li id="open-step"><b>2</b>Double-click alienX</li>
       <li><b>3</b>Make your account <span>handle, topics, writing style</span></li>
     </ol>
 
@@ -216,6 +222,8 @@ footer { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: .9rem; color:
     });
     document.getElementById("mac").classList.add("alt");
     document.getElementById("win").classList.remove("alt");
+    // The Windows zip opens with "Install alienX".
+    document.getElementById("open-step").lastChild.textContent = "Double-click Install alienX";
   } catch (e) {}
 })();
 </script>

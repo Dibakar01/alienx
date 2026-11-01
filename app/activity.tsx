@@ -157,7 +157,8 @@ export function Activity({ onGo, only, here = [] }: { onGo?: (w: Where) => void;
 
   const mine = jobs.filter((j) => ours(j.handle));
   const theirs = jobs.filter((j) => !ours(j.handle));
-  const done = ended.filter((e) => ours(e.handle));
+  // A finished job whose result is already on screen needs no Done card; a failure still says so.
+  const done = ended.filter((e) => ours(e.handle) && (!e.ok || !e.where || !here.includes(e.where)));
   return (
     <div role="status" aria-live="polite" aria-label="What alienX is doing" className="fixed bottom-[5.6rem] left-1/2 z-30 grid w-[min(30rem,calc(100%-1.5rem))] -translate-x-1/2 gap-2">
       {(mine.length > 0 || theirs.length > 0) && (
