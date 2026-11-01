@@ -2,7 +2,7 @@
 
 **alienX writes your X. You press post.** It finds ideas worth saying, writes five drafts in your own voice, draws a picture for each post and books the best time. Nothing goes out until you tap. It runs on your Mac or Windows PC, free with your Claude plan.
 
-![The Studio: a week of posts on a calendar, with status marks on top](docs/screenshots/04-studio.png)
+![alienX writes your X. You press post.](docs/hero.png)
 
 ## Download for Mac or Windows
 
@@ -51,6 +51,8 @@ Add a blog or past posts under "Teach it more" and alienX learns your real voice
 *Screenshots use made-up demo accounts and posts.*
 
 ## How it works
+
+![The Studio: a week of posts on a calendar, with status marks on top](docs/screenshots/04-studio.png)
 
 - **Ideas.** alienX searches the last two weeks of your world and brings a deck of ideas, each with why now. New ones arrive on their own.
 - **Drafts.** Five drafts per idea, one per angle (story, contrarian, observation, lesson, question), written the way X ranks posts: a hook first line, short lines, one concrete detail, no link (the source goes in a ready first reply). Every claim is tagged with where it came from.
