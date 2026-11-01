@@ -20,17 +20,20 @@ export function locate(text: string, article: Article | undefined): string | nul
   return article.body.slice(at, at + wanted.length);
 }
 
-// Builds voices/{handle}.json from that account's corpus and x_samples only.
+// Builds voices/{handle}.json from that account's corpus and x_samples, and from the style and
+// topics the person picked when there is no writing to study.
 export async function buildProfile(handle: string): Promise<Account> {
   const account = readAccount(handle);
   const corpus = readCorpus(handle);
-  if (!corpus.length && !account.x_samples.length) throw new Error(`@${handle}: no corpus and no x_samples to study`);
+  if (!corpus.length && !account.x_samples.length && !account.style?.length) throw new Error(`@${handle}: no writing to study and no style picked`);
 
   const { system, user } = prompt("profile", {
     display_name: account.display_name,
     handle,
     corpus: corpus.map((a) => `<article url="${a.url}" title=${JSON.stringify(a.title)}>\n${a.body}\n</article>`).join("\n\n"),
     x_samples: account.x_samples.join("\n") || "(none provided)",
+    style: account.style?.join(", ") || "(none picked)",
+    topics: account.pillars?.join(", ") || "(none picked)",
   });
   const profile = await ask(Profile, system, user);
 

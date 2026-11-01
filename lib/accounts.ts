@@ -22,6 +22,18 @@ export const Profile = z.object({
 });
 export type Profile = z.infer<typeof Profile>;
 
+// Tags typed by a person (topics, writing style) go into prompts, so each is cleaned at the
+// door: no control characters or brackets that could close a prompt block, one space between
+// words, at most 32 characters, no repeats (any case), and at most `max` of them.
+export function tags(input: string | string[], max: number): string[] {
+  const out: string[] = [];
+  for (const raw of Array.isArray(input) ? input : input.split(",")) {
+    const t = raw.replace(/[\u0000-\u001f\u007f<>{}\[\]`]/g, "").replace(/\s+/g, " ").trim().slice(0, 32).trim();
+    if (t && !out.some((x) => x.toLowerCase() === t.toLowerCase())) out.push(t);
+  }
+  return out.slice(0, max);
+}
+
 export const Account = z.object({
   handle: z.string().regex(HANDLE, "Not a valid X handle."),
   display_name: z.string().min(1, "A display name is needed."),
@@ -32,6 +44,8 @@ export const Account = z.object({
   source_url: z.url("Not a valid URL.").optional(),
   // Posts from the source that must never enter the corpus.
   exclude_urls: z.array(z.string()).optional(),
+  // How the person wants to sound, picked as tags; the voice is built from these when there is no writing to study.
+  style: z.array(z.string().trim().min(1)).optional(),
   // Words a draft for this account may not contain, such as "I" for an account that speaks as "we".
   banned_words: z.array(z.string()).optional(),
   x_samples: z.array(z.string()).default([]),

@@ -4,8 +4,9 @@
 // or add a new one. Both reuse the save actions. The overlay is always mounted and only
 // opened and closed, so a save keeps running when it is closed.
 import { useActionState, useEffect, useState } from "react";
-import { type FormState, addSamplesAction, saveAccountAction } from "./actions.ts";
+import { type FormState, addSamplesAction } from "./actions.ts";
 import { startJob } from "./activity.tsx";
+import { Onboard } from "./onboard.tsx";
 import { Working } from "./working.tsx";
 
 // While a save is studying a voice, it shows in the activity pill on every screen.
@@ -24,6 +25,8 @@ export type AccountInfo = {
   handle: string;
   name: string;
   type: "personal" | "brand";
+  // A cut-paper figure for a person, from config/local.json ("headphones" or "glasses").
+  figure?: string | null;
   inherits: string | null;
   pillars: string[];
   ready: boolean;
@@ -66,6 +69,8 @@ export function Accounts({
   onChange: (next: Upkeep) => void;
   onAdded: (handle: string) => void;
 }) {
+  // Bumped after each new account, so the next one starts on a fresh sheet.
+  const [added, setAdded] = useState(0);
   return (
     <dialog ref={ref} aria-labelledby="accounts-title" className="m-auto max-h-[calc(100dvh-1.5rem)] w-[min(34rem,calc(100%-1.5rem))] overflow-y-auto rounded-object bg-paper p-5 text-ink shadow-object sm:p-6">
       <div className="grid gap-5">
@@ -92,105 +97,18 @@ export function Accounts({
           ))}
         </div>
         <PastPosts hidden={upkeep.mode !== "posts"} accounts={accounts} who={upkeep.who} onWho={(who) => onChange({ ...upkeep, who })} />
-        <AddAccount hidden={upkeep.mode !== "add"} handles={accounts.map((a) => a.handle)} onDone={onAdded} />
+        <div hidden={upkeep.mode !== "add"}>
+          <Onboard
+            key={added}
+            handles={accounts.map((a) => a.handle)}
+            onDone={(h) => {
+              setAdded((k) => k + 1);
+              onAdded(h);
+            }}
+          />
+        </div>
       </div>
     </dialog>
-  );
-}
-
-function AddAccount({ hidden, handles, onDone }: { hidden: boolean; handles: string[]; onDone: (handle: string) => void }) {
-  const [state, action, pending] = useActionState(saveAccountAction, null);
-  // The submit button only looks ready once the required fields are filled.
-  const [valid, setValid] = useState(false);
-  const since = useJobWhile(pending, "Studying a new account's voice");
-  useEffect(() => {
-    if (state?.handle) onDone(state.handle);
-    // Only a new result counts. The form stays mounted, so a fresh onDone each render must not re-fire it.
-  }, [state]);
-
-  return (
-    <form hidden={hidden} action={action} onInput={(e) => setValid(e.currentTarget.checkValidity())} className="grid gap-4">
-      <p className="text-sm text-muted">Give me a handle and something to study: a blog, past posts, or an account to inherit from.</p>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-2">
-          <label htmlFor="handle" className="label">
-            Handle
-          </label>
-          <input id="handle" name="handle" required maxLength={16} placeholder="@handle" autoComplete="off" className="field font-mono" />
-        </div>
-        <div className="grid gap-2">
-          <label htmlFor="display_name" className="label">
-            Display name
-          </label>
-          <input id="display_name" name="display_name" required autoComplete="off" className="field" />
-        </div>
-        <div className="grid gap-2">
-          <label htmlFor="type" className="label">
-            Type
-          </label>
-          <select id="type" name="type" className="field">
-            <option value="personal">Personal</option>
-            <option value="brand">Brand</option>
-          </select>
-        </div>
-        <div className="grid gap-2">
-          <label htmlFor="inherits" className="label">
-            Inherits the voice of
-          </label>
-          <select id="inherits" name="inherits" className="field">
-            <option value="">Nobody</option>
-            {handles.map((h) => (
-              <option key={h} value={h}>
-                @{h}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-2">
-          <label htmlFor="source_url" className="label">
-            Substack or blog URL
-          </label>
-          <input id="source_url" name="source_url" type="url" placeholder="https://" className="field" />
-        </div>
-        <div className="grid gap-2">
-          <label htmlFor="pillars" className="label">
-            Pillars, comma separated
-          </label>
-          <input id="pillars" name="pillars" placeholder="Tech, Qalakaar" autoComplete="off" className="field" />
-        </div>
-      </div>
-      <div className="grid gap-2">
-        <label htmlFor="new_samples" className="label">
-          Past X posts, one per line
-        </label>
-        <textarea id="new_samples" name="x_samples" rows={3} className="field resize-none font-post" />
-      </div>
-      {/* Coming soon: upload writing to study. A placeholder for now; nothing is sent. */}
-      <div className="grid gap-2">
-        <span className="label">Or upload writing</span>
-        <div aria-disabled="true" className="grid place-items-center gap-1 rounded-[10px] border border-dashed border-strong bg-wash px-4 py-5 text-center">
-          <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 text-muted" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
-          </svg>
-          <span className="text-sm font-semibold text-muted">Drop essays, posts or a PDF here</span>
-          <span className="rounded-[6px] bg-paper px-2 py-0.5 text-xs font-semibold text-muted">Coming soon</span>
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <button type="submit" className="btn btn-dark" disabled={pending || !valid}>
-          {pending ? "Studying…" : "Save and study"}
-        </button>
-        <span className="text-sm text-muted">{pending ? "" : valid ? "" : "Needs a handle and a name."}</span>
-      </div>
-      {pending && (
-        <div className="rounded-[10px] bg-wash p-3">
-          <Working compact kind="draft" title="Studying the human." note="Reading the source, then learning the voice. About a minute or two; you can close this and keep working." since={since} />
-        </div>
-      )}
-      <Result state={state} />
-    </form>
   );
 }
 
@@ -236,7 +154,7 @@ function PastPosts({ hidden, accounts, who, onWho }: { hidden: boolean; accounts
       </div>
       {pending && (
         <div className="rounded-[10px] bg-wash p-3">
-          <Working compact kind="draft" title="Studying the human." note="Adding the posts and rebuilding the voice. About a minute." since={since} />
+          <Working compact kind="draft" title="Learning the voice" since={since} typical={60} />
         </div>
       )}
       <Result state={state} />

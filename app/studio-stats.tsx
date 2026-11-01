@@ -1,14 +1,16 @@
 "use client";
 
-// The Studio's numbers at a glance, all from the posts on hand and each account's cadence:
-// how full each account's week is, what goes out next, what needs you now and what went
-// out. A tile that points at a post opens it in one tap. On a phone every tile shows at once:
-// cadence and next post side by side, then the three counts in one short row. Under them,
-// a full-width row for what alienX suggests next.
+// The Studio's numbers in one slim strip, drawn rather than written: a ring per account
+// filling toward its week's cadence (posted slots solid), a clock to the next post, then what
+// is due and what alienX picked, each as a mark and a count, shown only when there is one. A
+// count that points at a post opens it in one tap. Every name is a tooltip and screen-reader
+// text. alienX's suggestions are one small button at the end. On a phone the rings take the
+// first row and the counts the second.
 import type { Post } from "../lib/db.ts";
 import { clock, dayName, local, ZONE } from "../lib/time.ts";
 import type { AccountInfo } from "./accounts.tsx";
 import { Avatar } from "./avatar.tsx";
+import { StatusMark } from "./status.tsx";
 
 // "in 25m", "in 3h 20m", "in 2d 4h".
 export function until(ms: number) {
@@ -36,103 +38,116 @@ export function Stats({
   thisWeek: (p: Post) => boolean; // whether a post falls in the current Monday-to-Sunday week
   nowMs: number;
   onOpen: (p: Post) => void;
-  children?: React.ReactNode; // a full-width row under the tiles: alienX's suggestions
+  children?: React.ReactNode; // a row under the strip: alienX's suggestions
 }) {
-  const solo = accounts.length === 1;
   const next = live.filter((p) => p.status === "scheduled" && Date.parse(p.scheduled_at) > nowMs).sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))[0];
   const due = live.filter((p) => p.status === "due");
   const picks = live.filter((p) => p.status === "scheduled" && p.picked).sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
-  const posted = live.filter((p) => p.status === "posted" && thisWeek(p)).length;
-  const who = (h: string) => accounts.find((a) => a.handle === h);
+  const nextName = next ? `Next post: @${next.handle}, ${dayName(local(new Date(next.scheduled_at), ZONE).day, { weekday: "short", day: "numeric", month: "short" })}, ${clock(next.scheduled_at)}` : "";
 
   return (
-    <section aria-label="This week in numbers" className="rise grid grid-cols-6 gap-2 px-1 pt-1 pb-1 sm:pb-2 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1.4fr)_repeat(3,minmax(0,1fr))] md:gap-3">
-      <Tile i={0} r={-0.5} label={`Cadence · ${weekLabel}`} wide>
-        <div className={`grid ${solo ? "gap-1" : "gap-0.5"}`}>
+    <section aria-label="This week in numbers" className="rise grid gap-1.5 px-1 pt-1 pb-1 sm:pb-2">
+      <div className="sheet flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-3 py-2" style={{ "--r": "-0.2deg", "--i": 0 } as React.CSSProperties}>
+        <ul aria-label={`Cadence, ${weekLabel}`} title={`Booked of each week's goal, ${weekLabel}`} className="flex flex-wrap items-center gap-x-4 gap-y-2">
           {accounts.map((a) => {
             const mine = week.filter((p) => p.handle === a.handle);
             const out = mine.filter((p) => p.status === "posted").length;
             const goal = a.cadence.per_week;
+            const name = `@${a.handle}: ${mine.length} of ${goal} booked or posted, ${out} posted`;
             return (
-              <div key={a.handle} className="flex items-center gap-1.5">
-                {!solo && <Avatar who={a} size={16} />}
-                {/* One slot per post the account aims for: solid when posted, grey when booked, open when empty. */}
-                <span className="flex min-w-0 gap-0.5" aria-hidden="true">
-                  {Array.from({ length: Math.max(goal, mine.length) }, (_, i) => (
-                    <span key={i} className={`rounded-[2px] ${solo ? "h-3 w-6" : "h-2 w-4"} ${i < out ? "bg-ink" : i < mine.length ? "bg-ink/30" : "border border-strong"}`} />
-                  ))}
+              <li key={a.handle} title={name} className="flex items-center gap-1.5">
+                <Ring booked={mine.length} out={out} goal={goal}>
+                  <Avatar who={a} size={24} />
+                </Ring>
+                <span aria-hidden="true" className="text-xs font-semibold tabular-nums">
+                  <span key={mine.length} className="roll">{mine.length}</span>
+                  <span className="text-muted">/{goal}</span>
                 </span>
-                <span className={`font-semibold tabular-nums ${solo ? "text-lg leading-none" : "text-xs"}`}>
-                  <span key={mine.length} className="roll">{mine.length}</span>/{goal}
-                </span>
-                <span className="sr-only">
-                  @{a.handle}: {mine.length} of {goal} booked or posted, {out} posted.
-                </span>
-              </div>
+                <span className="sr-only">{name}.</span>
+              </li>
             );
           })}
-          {solo && <span className="text-xs text-muted">booked of {accounts[0]!.cadence.per_week} a week</span>}
+        </ul>
+
+        <div className="flex items-center gap-1 text-sm font-semibold tabular-nums empty:hidden sm:border-l sm:border-line sm:pl-4">
+          {next && (
+            <Count label={nextName} onClick={() => onOpen(next)} mark={<ClockIcon />}>
+              <span key={next.id} className="roll">{until(Date.parse(next.scheduled_at) - nowMs)}</span>
+            </Count>
+          )}
+          {due.length > 0 && (
+            <Count label={`${due.length} due now. Open the first`} hot onClick={() => onOpen(due[0]!)} mark={<StatusMark kind="due" size={12} />}>
+              <span key={due.length} className="roll">{due.length}</span>
+            </Count>
+          )}
+          {picks.length > 0 && (
+            <Count label={`${picks.length} alienX ${picks.length === 1 ? "pick" : "picks"} waiting for your yes. Open the first`} onClick={() => onOpen(picks[0]!)} mark={<StatusMark kind="pick" size={14} />}>
+              <span key={picks.length} className="roll">{picks.length}</span>
+            </Count>
+          )}
+          {children}
         </div>
-      </Tile>
-
-      <Tile i={1} r={0.4} label="Next post" onClick={next ? () => onOpen(next) : undefined} wide>
-        {next ? (
-          <>
-            <span key={next.id} className="roll text-xl leading-none font-bold tabular-nums">{until(Date.parse(next.scheduled_at) - nowMs)}</span>
-            <span className="flex min-w-0 items-center gap-1.5 truncate text-xs text-muted">
-              {!solo && who(next.handle) && <Avatar who={who(next.handle)!} size={14} />}
-              {dayName(local(new Date(next.scheduled_at), ZONE).day, { weekday: "short", day: "numeric", month: "short" })}, {clock(next.scheduled_at)}
-            </span>
-          </>
-        ) : (
-          <>
-            <span className="text-xl leading-none font-bold">None</span>
-            <span className="text-xs text-muted">nothing booked ahead</span>
-          </>
-        )}
-      </Tile>
-
-      <Tile i={2} r={-0.3} label="Due now" compact hot={due.length > 0} onClick={due[0] ? () => onOpen(due[0]!) : undefined}>
-        <span key={due.length} className="roll text-xl leading-none font-bold tabular-nums">{due.length}</span>
-        <span className={`text-xs max-sm:hidden ${due.length ? "text-paper" : "text-muted"}`}>{due.length ? "tap to post" : "nothing waiting"}</span>
-      </Tile>
-
-      <Tile i={3} r={0.5} label="alienX picks" compact onClick={picks[0] ? () => onOpen(picks[0]!) : undefined}>
-        <span key={picks.length} className="roll text-xl leading-none font-bold tabular-nums">{picks.length}</span>
-        <span className="text-xs text-muted max-sm:hidden">{picks.length ? "waiting for your yes" : "none to review"}</span>
-      </Tile>
-
-      <Tile i={4} r={-0.4} label="Posted" compact>
-        <span key={posted} className="roll text-xl leading-none font-bold tabular-nums">{posted}</span>
-        <span className="text-xs text-muted max-sm:hidden">this week</span>
-      </Tile>
-
-      {children}
+      </div>
     </section>
   );
 }
 
-// One number on a scrap of paper; red when it needs you; a button when it leads somewhere.
-// A wide tile takes half a phone's width, a compact one a third, with its label beside its number.
-function Tile({ i, r, label, hot, wide, compact, onClick, children }: { i: number; r: number; label: string; hot?: boolean; wide?: boolean; compact?: boolean; onClick?: () => void; children: React.ReactNode }) {
-  const cls = `grid min-w-0 content-start gap-1 px-3 py-2 text-left md:col-span-1 ${wide ? "col-span-3" : "col-span-2"} ${
-    compact ? "max-sm:flex max-sm:items-center max-sm:justify-between max-sm:gap-1.5 max-sm:px-2.5 max-sm:py-1.5" : ""
-  } ${hot ? "rounded-card bg-brand text-paper shadow-object" : "sheet text-ink"
-  } ${onClick ? "cursor-pointer transition-transform duration-200 hover:-translate-y-0.5 motion-reduce:transition-none" : ""}`;
-  const style = { "--r": `${r}deg`, "--i": i } as React.CSSProperties;
+// A ring of one slot per post the account aims for: solid when posted, grey when booked,
+// faint when still open. Whatever sits inside (the avatar) is centred in it.
+function Ring({ booked, out, goal, children }: { booked: number; out: number; goal: number; children: React.ReactNode }) {
+  const slots = Math.max(goal, booked, 1);
+  const gap = slots > 1 ? 0.14 : 0;
+  return (
+    <span className="relative grid size-9 shrink-0 place-items-center">
+      <svg viewBox="0 0 36 36" className="absolute inset-0 size-full -rotate-90" aria-hidden="true">
+        {Array.from({ length: slots }, (_, i) => (
+          <circle
+            key={i}
+            cx="18"
+            cy="18"
+            r="16"
+            fill="none"
+            strokeWidth="3"
+            pathLength={slots}
+            strokeDasharray={`${1 - gap} ${slots}`}
+            strokeDashoffset={-i - gap / 2}
+            className={i < out ? "stroke-ink" : i < booked ? "stroke-ink/40" : "stroke-line"}
+          />
+        ))}
+      </svg>
+      {children}
+    </span>
+  );
+}
+
+// One mark and a number; a button when it leads to a post. Its name is the tooltip.
+function Count({ label, mark, hot, onClick, children }: { label: string; mark: React.ReactNode; hot?: boolean; onClick?: () => void; children: React.ReactNode }) {
+  const cls = `flex items-center gap-1.5 rounded-card px-2 py-1 ${hot ? "text-brand" : "text-ink"}`;
   const body = (
     <>
-      <span className={`truncate text-[11px] font-semibold ${hot ? "text-paper" : "text-muted"}`}>{label}</span>
-      {children}
+      <span aria-hidden="true" className="contents">
+        {mark}
+      </span>
+      <span aria-hidden="true">{children}</span>
+      <span className="sr-only">{label}</span>
     </>
   );
   return onClick ? (
-    <button type="button" onClick={onClick} className={cls} style={style}>
+    <button type="button" title={label} onClick={onClick} className={`${cls} cursor-pointer transition-colors hover:bg-wash motion-reduce:transition-none`}>
       {body}
     </button>
   ) : (
-    <div className={cls} style={style}>
+    <span title={label} className={cls}>
       {body}
-    </div>
+    </span>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg viewBox="0 0 14 14" className="size-3.5 shrink-0" aria-hidden="true">
+      <circle cx="7" cy="7" r="5.75" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M7 4v3.2l2 1.3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }

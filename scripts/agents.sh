@@ -1,9 +1,9 @@
 #!/bin/zsh
 # Installs alienX's three launchd agents for this user, then (re)starts them:
-#   com.qalakaar.alienx.server  builds once, then keeps `next start` running on 127.0.0.1:3000
-#   com.qalakaar.alienx.tick    every minute: posts whose slot came turn due, one notification
-#   com.qalakaar.alienx.plan    Sundays 20:00: discover new ideas for each account (approve them in Create)
-#   com.qalakaar.alienx.pick    daily 07:30: alienX's pick, one approved post for any account with nothing coming
+#   app.alienx.server  builds once, then keeps `next start` running on 127.0.0.1:3000
+#   app.alienx.tick    every minute: posts whose slot came turn due, one notification
+#   app.alienx.plan    Sundays 20:00: discover new ideas for each account (approve them in Create)
+#   app.alienx.pick    daily 07:30: alienX's pick, one approved post for any account with nothing coming
 # Re-run after pulling changes: it rebuilds and restarts the server. Logs go to data/logs/.
 # Remove with: scripts/agents.sh remove
 set -euo pipefail
@@ -11,9 +11,14 @@ ROOT=${0:A:h:h}
 AGENTS=~/Library/LaunchAgents
 LABELS=(server tick plan pick)
 
-for l in $LABELS; do launchctl bootout gui/$UID/com.qalakaar.alienx.$l 2>/dev/null || true; done
+# The agents' old names too, so an install from before the rename moves over cleanly.
+for l in $LABELS; do
+  launchctl bootout gui/$UID/app.alienx.$l 2>/dev/null || true
+  launchctl bootout gui/$UID/com.qalakaar.alienx.$l 2>/dev/null || true
+  rm -f $AGENTS/com.qalakaar.alienx.$l.plist
+done
 if [[ ${1:-} == remove ]]; then
-  for l in $LABELS; do rm -f $AGENTS/com.qalakaar.alienx.$l.plist; done
+  for l in $LABELS; do rm -f $AGENTS/app.alienx.$l.plist; done
   echo "alienX agents removed."; exit 0
 fi
 
@@ -26,11 +31,11 @@ mkdir -p $ROOT/data/logs $AGENTS
 plist() { # label, schedule xml, program args...
   local label=$1 when=$2; shift 2
   local args=""; for a in "$@"; do args+="<string>${a//&/&amp;}</string>"; done
-  cat > $AGENTS/com.qalakaar.alienx.$label.plist <<XML
+  cat > $AGENTS/app.alienx.$label.plist <<XML
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>Label</key><string>com.qalakaar.alienx.$label</string>
+  <key>Label</key><string>app.alienx.$label</string>
   <key>ProgramArguments</key><array>$args</array>
   <key>WorkingDirectory</key><string>$ROOT</string>
   <key>EnvironmentVariables</key><dict><key>PATH</key><string>$AGENT_PATH</string><key>CLAUDE_BIN</key><string>$CLAUDE</string></dict>
@@ -39,8 +44,8 @@ plist() { # label, schedule xml, program args...
   <key>StandardErrorPath</key><string>$ROOT/data/logs/$label.log</string>
 </dict></plist>
 XML
-  plutil -lint -s $AGENTS/com.qalakaar.alienx.$label.plist
-  launchctl bootstrap gui/$UID $AGENTS/com.qalakaar.alienx.$label.plist
+  plutil -lint -s $AGENTS/app.alienx.$label.plist
+  launchctl bootstrap gui/$UID $AGENTS/app.alienx.$label.plist
 }
 
 plist server '<key>RunAtLoad</key><true/><key>KeepAlive</key><true/>' $NPM start

@@ -17,7 +17,8 @@
     "local": "bash scripts/local.sh",
     "open": "bash scripts/open.sh",
     "stop": "bash scripts/stop.sh",
-    "app": "bash scripts/make-app.sh"
+    "app": "bash scripts/make-app.sh",
+    "download": "bash scripts/make-download.sh"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

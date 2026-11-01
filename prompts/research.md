@@ -21,7 +21,7 @@ Mix it up. The week's topics must not all be the same kind. Across them, cover d
 - the useful one: a practical lesson or how-to from this account's own field and experience, tied to something current;
 - the story: a scene from behind the work, the kind the account's own writing is full of, that connects to what people are talking about;
 - the argument: a contrarian or surprising read on a trend, one people will want to answer.
-Vary the angles and the pillars too. Make the topics differ from each other and from the recent topics listed. Nothing about Qalakaar itself may go beyond the facts.
+Vary the angles and the pillars too. Make the topics differ from each other and from the recent topics listed. Learn from what the person did with earlier ideas: each recent topic is marked drafted, skipped or waiting. Lean toward the kinds they drafted and away from the kinds they skipped, but keep one topic that stretches beyond their habits so the mix never narrows to one note. Nothing about the account or its company may go beyond the facts.
 
 =====
 
@@ -40,3 +40,7 @@ This account's pillars: {{pillars}}
 <recent_topics>
 {{recent}}
 </recent_topics>
+
+<taste>
+{{taste}}
+</taste>

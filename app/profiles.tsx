@@ -1,10 +1,10 @@
 "use client";
 
-// Who is posting: a rotary dial. "Add an account" comes first on the rim, then each account,
-// then all of them. Turn it (drag, arrow keys, the scroll wheel, or tap a name); it clicks
-// into each detent on One Flow's spring, and the centre shows who is chosen with Enter.
-// Profiles are a view, not a permission: the one login covers everyone. With no accounts
-// yet (a fresh clone), it welcomes you and adds the first one.
+// The front door, shown every time alienX opens: what it does in one line, and a rotary dial
+// to pick who is posting. "Add an account" comes first on the rim, then each account, then
+// all of them. One tap on a finger hole turns the dial there and goes straight into Create;
+// dragging, the arrow keys and the scroll wheel turn it, Enter goes in. With no accounts yet
+// (a fresh install), the dial's place holds the sheet that makes the first one.
 import { useEffect, useRef, useState } from "react";
 import type { Post, Topic } from "../lib/db.ts";
 import { type Suggestion, suggest } from "../lib/suggest.ts";
@@ -13,6 +13,8 @@ import { type AccountInfo, Accounts, type Upkeep } from "./accounts.tsx";
 import { Avatar } from "./avatar.tsx";
 import { readDismissed } from "./dismissed.ts";
 import { Mascot } from "./mascot.tsx";
+import { Onboard } from "./onboard.tsx";
+import { Vignette } from "./vignettes.tsx";
 
 type Slot = { kind: "add" } | { kind: "account"; account: AccountInfo } | { kind: "all" };
 
@@ -41,14 +43,14 @@ export function Profiles({
   topics,
   now,
   onPick,
-  onAbout,
+  last,
 }: {
   accounts: AccountInfo[];
   posts: Post[];
   topics: Topic[];
   now: string;
   onPick: (handle: string) => void;
-  onAbout?: () => void;
+  last?: string | null; // who posted last: the dial starts turned to them
 }) {
   // "Not today" from any screen hides a suggestion here too, except a due post: that stays.
   const today = local(new Date(now), ZONE).day;
@@ -63,13 +65,26 @@ export function Profiles({
     setUpkeep((u) => ({ ...u, mode: "add" }));
     dialog.current?.showModal();
   };
-  const accountsDialog = <Accounts ref={dialog} accounts={accounts} upkeep={upkeep} onChange={setUpkeep} onAdded={() => dialog.current?.close()} />;
+  const accountsDialog = (
+    <Accounts
+      ref={dialog}
+      accounts={accounts}
+      upkeep={upkeep}
+      onChange={setUpkeep}
+      onAdded={(h) => {
+        dialog.current?.close();
+        onPick(h);
+      }}
+    />
+  );
 
   const slots: Slot[] = [{ kind: "add" }, ...accounts.map((account) => ({ kind: "account" as const, account })), ...(accounts.length > 1 ? [{ kind: "all" as const }] : [])];
   const n = slots.length;
   const step = 360 / n;
-  // The dial's turn in degrees; the slot at the pointer is the chosen one. Starts on the first account.
-  const [rot, setRot] = useState(-step);
+  // The dial's turn in degrees; the slot at the pointer is the chosen one. Starts on whoever
+  // posted last, else the first account.
+  const lastAt = slots.findIndex((s) => (last === "all" ? s.kind === "all" : s.kind === "account" && s.account.handle === last));
+  const [rot, setRot] = useState(-step * (lastAt > 0 ? lastAt : 1));
   const [dragging, setDragging] = useState(false);
   const drag = useRef<{ a0: number; r0: number; last: number } | null>(null);
   const face = useRef<HTMLDivElement>(null);
@@ -90,28 +105,21 @@ export function Profiles({
     setRot(rot + diff);
   };
   const enter = (s: Slot = slot) => (s.kind === "add" ? add() : onPick(s.kind === "all" ? "all" : s.account.handle));
+  // One tap on a finger hole: the dial turns it under the stop, then alienX opens on it.
+  // Only one tap waits at a time, so two quick taps never enter twice.
+  const tapTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(tapTimer.current), []);
+  const tapTo = (i: number) => {
+    clearTimeout(tapTimer.current);
+    if (i === chosen) return enter(slots[i]);
+    turnTo(i);
+    tapTimer.current = setTimeout(() => enter(slots[i]), reduced() ? 0 : 380);
+  };
 
   const angleAt = (x: number, y: number) => {
     const r = face.current!.getBoundingClientRect();
     return (Math.atan2(y - (r.top + r.height / 2), x - (r.left + r.width / 2)) * 180) / Math.PI;
   };
-
-  if (accounts.length === 0)
-    return (
-      <div className="grid h-full place-items-center p-4">
-        <div className="sheet tape grid max-w-md justify-items-center gap-4 px-8 pt-10 pb-8 text-center">
-          <Mascot className="size-14 text-brand" />
-          <h2 className="text-2xl font-bold tracking-[-0.03em]">Welcome to alienX</h2>
-          <p className="text-sm text-muted">
-            Add the X accounts alienX writes for. For each one, give it the account&apos;s own public writing (a Substack or blog link) or paste past posts, and it learns the voice. It takes a minute or two.
-          </p>
-          <button type="button" className="btn btn-primary px-5 py-3 text-base" onClick={add}>
-            Add your first account
-          </button>
-        </div>
-        {accountsDialog}
-      </div>
-    );
 
   const stats = (handle?: string) => {
     const mine = posts.filter((p) => !handle || p.handle === handle);
@@ -122,18 +130,46 @@ export function Profiles({
   const ease = dragging || reduced() ? "none" : "transform var(--dur-spring) var(--spring)";
 
   return (
-    <div className="grid h-full grid-rows-[auto_1fr_auto] gap-2 p-4 sm:p-8">
-      <header className="flex items-center gap-4 pr-14">
-        <button type="button" onClick={onAbout} aria-label="About alienX" className="rounded-full">
-          <Mascot className="size-9 text-brand" />
-        </button>
-        <div>
-          <h2 className="text-2xl leading-tight font-bold tracking-[-0.03em]">Who is posting?</h2>
-          <p className="text-sm text-snow-muted">Turn the dial (drag it, use the arrow keys or tap a name), then enter.</p>
-        </div>
-      </header>
+    <div className="grid h-full content-start gap-6 overflow-x-hidden overflow-y-auto p-4 pb-10 sm:p-8 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:content-center lg:gap-10 lg:px-12">
+      <section className="rise grid content-start gap-4 pr-12 lg:pr-0">
+        <p className="flex items-center gap-2.5">
+          <Mascot className="size-8 text-brand" />
+          <span className="text-lg font-bold tracking-[-0.02em]">alienX</span>
+        </p>
+        <h2 className="text-4xl leading-[1.05] font-bold tracking-[-0.04em] sm:text-5xl">
+          alienX writes your X.{" "}
+          <span className="pencil-mark text-brand">
+            You press post.
+            <svg viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true">
+              <path d="M1 6.5C18 4.8 33 7.6 50 5.6S82 3.9 99 5.2" />
+            </svg>
+          </span>
+        </h2>
+        <ol className="grid max-w-md grid-cols-3 gap-2.5" aria-label="How it works">
+          {(
+            [
+              ["discover", "Ideas"],
+              ["draft", "Drafts"],
+              ["post", "Calendar"],
+            ] as const
+          ).map(([kind, label], i) => (
+            <li key={kind} style={{ "--r": `${(i % 2 ? 1 : -1) * 0.8}deg` } as React.CSSProperties} className="sheet grid gap-1.5 p-1.5 pb-2">
+              <div className="aspect-[5/3] overflow-hidden rounded-[5px] bg-wash">
+                <Vignette kind={kind} />
+              </div>
+              <span className="px-1 text-xs font-bold">
+                <span className="text-brand tabular-nums">{i + 1}</span> {label}
+              </span>
+            </li>
+          ))}
+        </ol>
+        <p className="text-sm text-snow-faint">Runs on your Mac. Free with your Claude plan.</p>
+      </section>
 
       <main className="grid place-items-center">
+        {accounts.length === 0 ? (
+          <Onboard first onDone={(h: string) => onPick(h)} />
+        ) : (
         <div
           ref={face}
           role="listbox"
@@ -141,6 +177,8 @@ export function Profiles({
           aria-label="Who is posting. Turn with the arrow keys, Enter to choose."
           aria-activedescendant={`slot-${chosen}`}
           onKeyDown={(e) => {
+            // Enter or Space on a focused finger hole is that button's own click.
+            if (e.target !== e.currentTarget && (e.key === "Enter" || e.key === " ")) return;
             if (e.key === "ArrowRight" || e.key === "ArrowDown") (e.preventDefault(), setRot(rot - step));
             if (e.key === "ArrowLeft" || e.key === "ArrowUp") (e.preventDefault(), setRot(rot + step));
             if (e.key === "Enter" || e.key === " ") (e.preventDefault(), enter());
@@ -166,8 +204,7 @@ export function Profiles({
             setDragging(false);
             if (d) setRot(Math.round(d.last / step) * step);
           }}
-          style={{ "--dial": "min(36rem, 94vw, 62vh)" } as React.CSSProperties}
-          className="relative aspect-square w-(--dial) cursor-grab touch-none rounded-full outline-none select-none focus-visible:ring-4 focus-visible:ring-brand/60 active:cursor-grabbing"
+          className="relative aspect-square [--dial:min(calc(100vw_-_2rem),52vh)] lg:[--dial:min(34rem,46vw,76vh)] w-(--dial) cursor-grab touch-none rounded-full outline-none select-none focus-visible:ring-4 focus-visible:ring-brand/60 active:cursor-grabbing"
         >
           {/* The finger stop, fixed at twelve o'clock: whoever turns under it is posting. */}
           <svg viewBox="0 0 20 18" aria-hidden="true" className="absolute -top-3.5 left-1/2 z-10 w-7 -translate-x-1/2 drop-shadow-md">
@@ -197,7 +234,7 @@ export function Profiles({
                     aria-label={label}
                     title={label}
                     type="button"
-                    onClick={() => (on ? enter(s) : turnTo(i))}
+                    onClick={() => tapTo(i)}
                     style={{ transform: `translate(-50%, -50%) rotate(${-(i * step) - rot}deg)`, transition: ease }}
                     className={`absolute grid size-[calc(var(--dial)*0.2)] place-items-center rounded-full bg-wash shadow-[inset_0_3px_7px_rgb(0_0_0/0.28),inset_0_-1px_0_rgb(255_255_255/0.7)] transition-[box-shadow,filter] duration-200 ${
                       on ? "ring-[3px] ring-brand ring-offset-[3px] ring-offset-paper" : "*:grayscale-[0.65] *:transition-[filter] hover:*:grayscale-0"
@@ -227,9 +264,8 @@ export function Profiles({
           <div className="absolute inset-[28%] grid place-items-center rounded-full bg-paper text-center text-ink shadow-[0_0_0_1px_var(--rule-strong),var(--lift)]">
             <span aria-hidden="true" className="absolute inset-[5%] rounded-full border border-dashed border-line" />
             <div className="relative grid justify-items-center gap-1 px-5 max-sm:gap-0.5 max-sm:px-3" key={chosen}>
-              <p className="roll text-[11px] max-sm:hidden! font-semibold tracking-[0.14em] text-muted uppercase">{slot.kind === "add" ? "New voice" : "Posting as"}</p>
               <p className="roll text-xl leading-tight font-bold tracking-[-0.02em] sm:text-2xl">{slot.kind === "add" ? "Add an account" : slot.kind === "all" ? "All accounts" : slot.account.name}</p>
-              <p className="roll text-sm text-muted">{slot.kind === "add" ? "Teach alienX a new voice" : slot.kind === "all" ? (waiting() ? things(waiting()) : stats()) : `@${slot.account.handle}`}</p>
+              <p className="roll text-sm text-muted">{slot.kind === "add" ? "A new voice" : slot.kind === "all" ? (waiting() ? things(waiting()) : stats()) : `@${slot.account.handle}`}</p>
               {slot.kind === "account" && (
                 <p className={`roll line-clamp-2 max-w-[12rem] text-xs leading-snug max-sm:text-[11px] max-sm:leading-tight ${waiting(slot.account.handle) ? "font-semibold text-brand" : "text-muted"}`}>
                   {line(tipsFor(slot.account.handle)[0], tipsFor(slot.account.handle))}
@@ -241,9 +277,8 @@ export function Profiles({
             </div>
           </div>
         </div>
+        )}
       </main>
-
-      <span />
       {accountsDialog}
     </div>
   );

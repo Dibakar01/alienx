@@ -9,7 +9,8 @@ import { LIMIT, problems, weighted } from "../lib/post.ts";
 import { when } from "../lib/time.ts";
 import type { AccountInfo } from "./accounts.tsx";
 import { changePostAction } from "./actions.ts";
-import { startJob } from "./activity.tsx";
+import { Bar } from "./activity.tsx";
+import { artVersion, draw } from "./drawing.ts";
 import { Working } from "./working.tsx";
 import { XPreview } from "./x-preview.tsx";
 
@@ -31,7 +32,7 @@ export function PostDetail({
   today: string;
   onClose: () => void;
   onKill: (p: Post) => void;
-  onSaved: (text: string) => void;
+  onSaved: (text: string, undo?: () => void) => void;
   onChanged: (p: Post) => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -39,6 +40,7 @@ export function PostDetail({
   const [page, setPage] = useState(0);
   const [art, setArt] = useState("");
   const [drawing, setDrawing] = useState(0); // when a redraw started, 0 when idle
+  const figure = useRef<HTMLElement>(null);
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false); // Post to X was tapped in this sitting
   const [replied, setReplied] = useState(false); // the first reply was copied
@@ -53,17 +55,36 @@ export function PostDetail({
   // effect, so the first frame already shows this post's steps instead of flashing the last one's.
   // Saving an edit hands back the same post with a new identity: the text reloads, but the
   // ticks for Post to X and the reply stay, since those were already done in this sitting.
+  // A new picture on the same post (a redraw) gets a fresh version so the image reloads.
   if (post && post !== loaded) {
     if (post.id !== loaded?.id) {
       setSent(false);
       setReplied(false);
-    }
+      setArt(post.art && typeof post.art === "object" && "seed" in post.art ? String((post.art as { seed: number }).seed) : "");
+    } else if (JSON.stringify(post.art) !== JSON.stringify(loaded?.art)) setArt(artVersion(post));
     setLoaded(post);
     setPosts(post.posts);
     setPage(0);
     setError("");
-    setArt(post.art && typeof post.art === "object" && "seed" in post.art ? String((post.art as { seed: number }).seed) : "");
   }
+
+  // The post on show, so a drawing that finishes after a close or a switch is dropped.
+  const shown = useRef<number | null>(null);
+  useEffect(() => {
+    shown.current = post?.id ?? null;
+    return () => {
+      shown.current = null;
+    };
+  }, [post?.id]);
+
+  // A post with no picture gets one on its own: the view joins a drawing already running for
+  // it (just approved in Create), or starts one. Posted posts are left as they are.
+  useEffect(() => {
+    if (!post || post.status === "posted" || art) return;
+    void follow(post.id);
+    // Once per post opened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [post?.id]);
 
   // Closing it with Esc or the backdrop tells the Studio.
   useEffect(() => {
@@ -87,6 +108,31 @@ export function PostDetail({
     words.current?.scrollIntoView({ block: "nearest" });
   }, [focusWords]);
 
+  // After Post to X, the first reply is put on the clipboard as soon as you come back to this
+  // page, so it is ready to paste under your post without hunting for it.
+  useEffect(() => {
+    if (!post || !sent || replied || !sources.length) return;
+    const back = () => {
+      if (document.visibilityState !== "visible") return;
+      navigator.clipboard
+        .writeText(firstReply(sources))
+        .then(() => {
+          setReplied(true);
+          onSaved("First reply copied. Paste it under your post on X.");
+        })
+        .catch(() => {
+          // No clipboard without a tap here: the Copy button in the next step does it.
+        });
+    };
+    window.addEventListener("focus", back);
+    document.addEventListener("visibilitychange", back);
+    return () => {
+      window.removeEventListener("focus", back);
+      document.removeEventListener("visibilitychange", back);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [post?.id, sent, replied, sources]);
+
   if (!post) return <dialog ref={ref} onClose={onClose} className="hidden" />;
 
   const allow = { hashtags: false, emoji: account?.emoji ?? false, banned: account?.banned ?? [] };
@@ -97,18 +143,20 @@ export function PostDetail({
   const posted = post.status === "posted";
   const unverified = post.claims.filter((c) => c.source === "unverified").length;
 
-  const redraw = async () => {
-    const done = startJob({ handle: post.handle, label: `Drawing a new picture for @${post.handle}`, kind: "picture", where: "week", typical: 35 });
-    setDrawing(Date.now());
+  // Draws the picture (or joins the drawing already running for this post) and shows it here.
+  const follow = async (id: number) => {
+    const d = draw(id, post!.handle);
+    setDrawing(d.since);
     setError("");
-    const r = (await fetch("/api/art", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: post.id }) })
-      .then((x) => x.json())
-      .catch((e: unknown) => ({ error: String(e) }))) as { post?: Post; error?: string };
+    const p = await d.done;
+    if (shown.current !== id) return;
     setDrawing(0);
-    done(r.error || !r.post ? { ok: false, text: "The new picture did not draw." } : { ok: true, text: "New picture ready." });
-    if (r.error || !r.post) return setError(r.error ?? "No image came back.");
-    setArt(String((r.post.art as { seed: number }).seed) + "-" + Date.now());
+    if (!p) return setError("The picture did not draw. Try Draw again.");
+    setArt(artVersion(p));
+    onChanged(p);
+    requestAnimationFrame(() => figure.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
   };
+  const redraw = () => void follow(post.id);
 
   const save = () =>
     start(async () => {
@@ -130,9 +178,18 @@ export function PostDetail({
     start(async () => {
       const r = await changePostAction({ do: "posted", id: post.id });
       if (r.error) return setError(r.error);
-      onSaved("Marked as posted. The voice learns from it.");
+      onSaved("Marked as posted.", unpost);
       onClose();
     });
+  // Undo of "I posted it", from the toast or from the posted post itself.
+  const unpost = () =>
+    start(async () => {
+      const r = await changePostAction({ do: "unposted", id: post.id });
+      if (r.error || !r.post) return setError(r.error ?? "Not undone.");
+      onChanged(r.post);
+      onSaved("Back on the calendar.");
+    });
+
 
   // The posting steps, in order. Each is done, the one to do now, or still to come; the
   // first one not done is "now". Words are done when nothing is unsaved and nothing runs over.
@@ -165,7 +222,8 @@ export function PostDetail({
         } } });
   });
   if (unverified) checks.push({ id: "claims", issue: true, text: `${unverified === 1 ? "One claim is" : `${unverified} claims are`} not verified yet.`, fix: { label: "Show the claims", do: showClaims } });
-  if (!art) checks.push({ id: "art", issue: true, text: drawing ? "Drawing the picture now." : "No picture yet.", fix: { label: "Draw the picture", do: redraw, off: drawing > 0 } });
+  // While it draws, the progress shows right here, where the button was pressed.
+  if (!art) checks.push(drawing ? { id: "art", issue: true, text: "Drawing the picture", since: drawing } : { id: "art", issue: true, text: "No picture yet.", fix: { label: "Draw the picture", do: redraw } });
   if (dirty) checks.push({ id: "dirty", issue: true, text: "You have unsaved edits.", fix: { label: "Save changes", do: save, off: busy || tooLong } });
   // alienX booked it by itself: one tap says yes, and every "review it" reminder goes away.
   if (post.picked && !posted)
@@ -221,7 +279,7 @@ export function PostDetail({
         {/* As the feed will show it: the words as they stand now, and the image. On a laptop it
             stays in view while the steps beside it scroll; on a phone it follows the steps, so
             Post to X is near the top. */}
-        <figure className="relative order-last self-start lg:sticky lg:top-0 lg:order-none">
+        <figure ref={figure} className="relative order-last self-start lg:sticky lg:top-0 lg:order-none">
           <div className={drawing ? "opacity-60" : ""}>
             <XPreview
               name={account?.name ?? post.handle}
@@ -235,7 +293,7 @@ export function PostDetail({
           {drawing > 0 && (
             <span className="absolute inset-0 grid place-items-center p-4">
               <span className="sheet max-w-xs px-4 py-3">
-                <Working compact kind="picture" title="Drawing the picture" note="Picking a visual metaphor for the post, then drawing it. About half a minute." since={drawing} />
+                <Working compact kind="picture" title="Drawing the picture" since={drawing} typical={35} />
               </span>
             </span>
           )}
@@ -257,6 +315,11 @@ export function PostDetail({
                     <li key={c.id} className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                       <span aria-hidden="true" className={`size-2 shrink-0 rounded-[2px] ${c.issue ? "bg-ink" : "border border-strong"}`} />
                       <span className={`min-w-0 flex-1 ${c.issue ? "text-ink" : "text-muted"}`}>{c.text}</span>
+                      {c.since && (
+                        <span className="basis-full pl-4.5">
+                          <Bar since={c.since} typical={35} />
+                        </span>
+                      )}
                       {c.fix && (
                         <button type="button" className="btn px-2.5 py-1" onClick={c.fix.do} disabled={c.fix.off}>
                           {c.fix.label}
@@ -338,6 +401,12 @@ export function PostDetail({
                 <Step n={number("post")} state={stateOf("post")} title="Post to X" hint="One tap opens X with the words, and the image comes with them.">
                   <div className="flex flex-wrap items-center gap-2">
                     <PostButton post={post} text={text} art={art} disabled={tooLong || dirty} quiet={stateOf("post") !== "now"} onSent={() => setSent(true)} />
+                    {/* The first reply, right beside Post: no going back to find it. */}
+                    {sent && sources.length > 0 && (
+                      <button type="button" className={`btn ${replied ? "" : "btn-dark"}`} onClick={copyReply}>
+                        {replied ? "First reply copied" : "Copy first reply"}
+                      </button>
+                    )}
                   </div>
                   {dirty && <p className="text-xs text-muted">Save your changes before posting.</p>}
                   {posts.length > 1 && <p className="text-xs text-muted">X takes one post per tap. Post the first, then reply to it with the rest, copying each from step 1.</p>}
@@ -363,7 +432,12 @@ export function PostDetail({
 
           {posted && (
             <div className="grid justify-items-start gap-3 border-t border-line pt-3">
-              <span className="stamp stamp-solid">posted</span>
+              <span className="flex flex-wrap items-center gap-3">
+                <span className="stamp stamp-solid">posted</span>
+                <button type="button" className="link text-sm text-muted" onClick={unpost} disabled={busy}>
+                  Not posted yet? Undo
+                </button>
+              </span>
               {sources.length > 0 && <Sources sources={sources} />}
             </div>
           )}
@@ -414,7 +488,7 @@ export function PostDetail({
 }
 
 type StepKey = "check" | "post" | "reply" | "mark";
-type Check = { id: string; issue: boolean; text: string; fix?: { label: string; do: () => void; off?: boolean } };
+type Check = { id: string; issue: boolean; text: string; since?: number; fix?: { label: string; do: () => void; off?: boolean } };
 type StepState = "done" | "now" | "next";
 
 // One numbered line of the checklist: a marker (red for now, ink with a tick when done,

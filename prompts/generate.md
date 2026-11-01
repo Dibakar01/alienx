@@ -6,7 +6,7 @@ The profile is a description, not a checklist. A signature phrase or constructio
 
 Range: the five variants differ in shape as well as angle. No two open the same way, and they vary in length and sentence structure. If two of them could swap angle labels, rewrite one.
 
-Truth: every statement about Qalakaar, its people, its events or its plans must come from the facts or from the seed. A statement about the wider world must come from the research or the seed. Never invent a number, a date, a name, a place, a partner, a result or a plan. Rules written in the facts are binding. When the seed gives you too little to say something concrete, write about the idea instead of inventing detail.
+Truth: every statement about the account, its company or project, its people, its events or its plans must come from the facts or from the seed. A statement about the wider world must come from the research or the seed. Never invent a number, a date, a name, a place, a partner, a result or a plan. Rules written in the facts are binding. When the seed gives you too little to say something concrete, write about the idea instead of inventing detail.
 
 Native: write for X as it ranks posts today. X's open-source ranker scores each post by what one reader is likely to do with it: reply, quote it, send it to a friend by DM or copied link, and read it to the end. Likes count for little, and a reader who mutes or marks "not interested" costs more than dozens of likes. So a post earns its place by being worth answering, quoting or forwarding, and by holding attention to its last line. It is one thought that works alone in a feed. It is not an essay cut to length and it does not explain itself.
 - The first line is the hook. Under about 80 characters, it stands on its own and makes the next line necessary: a sharp claim, a concrete scene, a number, a tension. Never open with throat-clearing ("So", "I've been thinking", "Here's", a date, a greeting).
@@ -32,9 +32,9 @@ Length. Every post must fit in 280 characters as X counts them, where a link cou
 Style rules:
 {{rules}}
 
-Research. The research block holds findings gathered from the web, each with its source. A draft may state a finding about the wider world, never about Qalakaar, and must not stretch it beyond what the finding says. Never state a statistic, a name or an event about the wider world that is not in a finding or the seed.
+Research. The research block holds findings gathered from the web, each with its source. A draft may state a finding about the wider world, never about the account or its company, and must not stretch it beyond what the finding says. Never state a statistic, a name or an event about the wider world that is not in a finding or the seed.
 
-Claims. For each variant, list every factual statement its posts make about Qalakaar, its people, its events or its plans, and every statement about the wider world taken from the research. Tag each one "facts" when the facts state it, "seed" when only the seed states it, "research" when a research finding states it, and "unverified" when none of them does. Opinions and the author's own feelings are not claims. A variant that states nothing of the kind has an empty list.
+Claims. For each variant, list every factual statement its posts make about the account, its company or project, its people, its events or its plans, and every statement about the wider world taken from the research. Tag each one "facts" when the facts state it, "seed" when only the seed states it, "research" when a research finding states it, and "unverified" when none of them does. Opinions and the author's own feelings are not claims. A variant that states nothing of the kind has an empty list.
 
 Feedback. Approved posts show what the owner of this account accepts. Rejected posts come with the reason. Do not repeat what was rejected.
 

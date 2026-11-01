@@ -8,8 +8,8 @@ const post = (handle: string, scheduled_at: string) =>
   createPost({ handle, posts: ["hello"], claims: [], source: "seed", scheduled_at });
 
 test("claimDue takes only posts whose slot has come, and only once", () => {
-  const past = post("dibakaarr", "2026-11-01T10:00:00.000Z");
-  const future = post("dibakaarr", "2026-11-09T10:00:00.000Z");
+  const past = post("sam_writes", "2026-11-01T10:00:00.000Z");
+  const future = post("sam_writes", "2026-11-09T10:00:00.000Z");
   const now = "2026-11-02T00:00:00.000Z";
 
   assert.deepEqual(claimDue(now).map((p) => p.id), [past.id]);
@@ -18,23 +18,23 @@ test("claimDue takes only posts whose slot has come, and only once", () => {
 });
 
 test("killed posts free their slot and leave the week", () => {
-  const p = post("anshsarkar_", "2026-11-04T08:00:00.000Z");
-  assert.ok(takenSlots("anshsarkar_", "2026-11-01T00:00:00.000Z").includes(p.scheduled_at));
+  const p = post("ana_codes", "2026-11-04T08:00:00.000Z");
+  assert.ok(takenSlots("ana_codes", "2026-11-01T00:00:00.000Z").includes(p.scheduled_at));
   updatePost(p.id, { status: "killed" });
-  assert.deepEqual(takenSlots("anshsarkar_", "2026-11-01T00:00:00.000Z"), []);
+  assert.deepEqual(takenSlots("ana_codes", "2026-11-01T00:00:00.000Z"), []);
   assert.ok(!listPosts("2026-11-01T00:00:00.000Z", "2026-11-08T00:00:00.000Z").some((x) => x.id === p.id));
 });
 
 test("only known fields of a post can be patched", () => {
-  const p = post("iamqalakaar", "2026-11-05T08:00:00.000Z");
+  const p = post("acme_studio", "2026-11-05T08:00:00.000Z");
   assert.throws(() => updatePost(p.id, { handle: "x" } as never), /cannot be changed/);
 });
 
 test("a post alienX booked itself is its pick until someone approves the draft", () => {
-  const [d] = saveDrafts({ handle: "iamqalakaar", seed: "idea", format: "single" }, [{ angle: "story", posts: ["hi"], claims: [] }]);
+  const [d] = saveDrafts({ handle: "acme_studio", seed: "idea", format: "single" }, [{ angle: "story", posts: ["hi"], claims: [] }]);
   const at = "2026-11-06T08:00:00.000Z";
-  const p = createPost({ handle: "iamqalakaar", draft_id: d!.id, posts: ["hi"], claims: [], source: "plan", scheduled_at: at });
-  const mine = post("iamqalakaar", "2026-11-06T12:00:00.000Z");
+  const p = createPost({ handle: "acme_studio", draft_id: d!.id, posts: ["hi"], claims: [], source: "plan", scheduled_at: at });
+  const mine = post("acme_studio", "2026-11-06T12:00:00.000Z");
   const week = () => listPosts("2026-11-06T00:00:00.000Z", "2026-11-07T00:00:00.000Z");
   assert.equal(week().find((x) => x.id === p.id)?.picked, 1);
   assert.equal(week().find((x) => x.id === mine.id)?.picked, 0);

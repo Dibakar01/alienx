@@ -1,6 +1,6 @@
 ---
 name: alienX
-description: Torn paper on a dark ground, in the Qalakaar One Flow scrapbook style. A week of posts, a writing desk and a topic board, switched by a dock.
+description: Torn paper on a dark ground, in the One Flow scrapbook style (by Qalakaar). A front door with a dial, an idea deck, and a week of posts, switched by a dock.
 colors:
   red: "var(--red)"
   white: "var(--white)"
@@ -205,11 +205,11 @@ components:
 
 **Creative North Star: "The Scrapbook on the Desk"**
 
-alienX now follows the Qalakaar One Flow system (the "Qalakaar · one flow" canvas). The page is a dark ground. Work sits on torn paper sheets held down with a strip of tape, the way One Flow's landing pages lay their panels. Qalakaar red marks the one action on a sheet or the thing that needs you; ink is warm black on paper; pencil grey draws hand marks.
+alienX follows the One Flow system (by Qalakaar). The page is a dark ground. Work sits on torn paper sheets held down with a strip of tape. Red marks the one action on a sheet or the thing that needs you; ink is warm black on paper; pencil grey draws hand marks.
 
-A landing page shows once on the way in: what alienX does in three steps (Idea, Approve, Studio), each with a small moving scrapbook picture, and Get started. Then comes the profile dial (see below). The original chooser was: "Who is posting?" over three taped sheets (Qalakaar with the red alien, Dibakar and Ansh with an ink initial), each with what is due, and a quiet "All three" key on the ground beneath. A profile then fills the screen with that account only, and the dock's last item (the profile's mark) returns to the chooser. Each view's title names the profile ("Studio · Dibakar").
+The front door shows every time alienX opens: the headline, three small picture chips (1 Ideas, 2 Drafts, 3 Calendar) and the profile dial beside them (see below). One tap on a finger hole turns the dial there and opens Create. With no accounts yet, the dial's place holds "Make your account": one torn sheet in three numbered steps (your X account; what you post about, as tag chips; how you sound, as tag chips) with "Teach it more" folded underneath. Inside a profile the dock's last item returns to the front door.
 
-Two views share the ground, switched by a dock at the bottom with two labelled steps (keys 1 and 2): **1 Create** and **2 Studio**. Create is one surface that moves forward by itself: alienX's recommended idea on a taped card, your own words below it, more ideas beside; one tap writes five drafts, which open in place with alienX's pick of the five preselected, and Approve ends with "See it in Studio" or "Make another". The Studio is a Monday-to-Sunday calendar with the week's numbers on top. Each view fits the window; the page itself never scrolls. A view switch settles in a quarter second from mostly visible, so moving around never feels like waiting.
+Two views share the ground, switched by a dock at the bottom with two labelled steps (keys 1 and 2): **1 Create** and **2 Studio**. Create is a deck of idea cards, one in front at a time (swipe, the arrow keys or the notches under it), alienX's recommendation on top; each card carries Draft it and Skip, Skip flicks the card away with Undo, and the last card discovers new ideas with its progress bar on the card. Your own words are one slim line above the deck. Drafting deals the five drafts in; Approve draws the picture in place with a bar and ends with two buttons: Open the post and Make another. The Studio is a Monday-to-Sunday calendar under a slim strip of status marks. Each view fits the window. A view switch settles in a quarter second.
 
 The voice stays dry and short, with no exclamation marks. The fixed strings stay: "No drafts yet. Give me a thought to study.", "Studying the human.", "Signal lost. Try again."
 
@@ -223,7 +223,7 @@ The voice stays dry and short, with no exclamation marks. The fixed strings stay
 
 Every colour is defined once in `app/globals.css`. Mixes are written there with `color-mix`; nothing else in the project names a colour. The image renderer (`lib/art.ts`) draws pixels, not UI, and carries its own copy of the paper palette.
 
-- **Qalakaar Red** (`--red`): the one action on a sheet (Generate, Approve, Draft this idea, Post to X), chosen accounts, the step to do now, a due card's edge and its mark, the focus ring, the dock's indicator and badges.
+- **Red** (`--red`): the one action on a sheet (Generate, Approve, Draft this idea, Post to X), chosen accounts, the step to do now, a due card's edge and its mark, the focus ring, the dock's indicator and badges.
 - **Sheet** (`--white`): every surface you read or type on. **Ink** (`--black`): type on paper. **Paper** (`--paper`, also `--wash`): wells, image frames, quiet fills.
 - **Ground** (`--ground`): the page. **Snow** (`--snow`) and its mixes (`--snow-muted`, `--snow-faint`, `--snow-line`): type and lines on the ground. **Panel** (`--panel`) and **Glass** (`--glass`): the dock and the toast.
 - **Pencil** (`--pencil`): hand marks, the resting mascot, the shimmer of working text. **Tape** (`--tape`): tape strips only.
@@ -276,10 +276,10 @@ Torn edges for sheets (`--torn-a`, `--torn-b`, `--torn-c`, from One Flow's scrap
 - **Page turn:** the incoming view settles in on the spring (`.page-in`, `.view`), while the dock and the theme switch stay put. No View Transition: it froze the page for its length and dropped clicks.
 - **Create, simplified:** inside a profile there is no account step. Drafts open on their X preview; Approve is the red action, and a draft can only be copied here, never posted.
 - **Toast:** dark panel above the dock, ten seconds, with Undo after a kill.
-- **Profile dial:** "Who is posting?" is a rotary phone's finger wheel: a paper disc with a bezel, a finger hole for each slot (Add an account, then each account, then All accounts), and a red finger stop at twelve o'clock. The hole under the stop is ringed in red and in colour; the others rest in greyscale. Drag it, use the arrow keys or the scroll wheel, or tap a hole; it snaps to each detent on the spring with a light knock on phones. The still number card in the middle says "Posting as", the name, the handle and what is due, with Enter (or Add).
-- **Avatars:** cut-paper vector portraits in the palette (placeholders until photos): the brand is the red alien disc, Dibakar has wavy hair and red headphones, Ansh has square glasses and a red code bracket; any other account gets its initial. Used on the dial, the dock, the Studio rows and the feed preview.
+- **Profile dial:** a rotary phone's finger wheel: a paper disc with a bezel, a finger hole for each slot (Add an account, then each account, then All accounts), and a red finger stop at twelve o'clock. One tap on a hole turns it under the stop and goes in; drag, the arrow keys or the scroll wheel turn it, Enter goes in. A red dot marks an account that needs you.
+- **Avatars:** cut-paper vector portraits in the palette: a brand is the red alien disc; a person can be given a figure in `config/local.json` (headphones or glasses); anyone else gets their initial.
 - **Activity card:** one paper card above the dock for what alienX is doing for this profile: its moving picture, what it is doing, a red bar filling toward how long it usually takes, and Show (the step where it lands). More jobs for this profile are lines under it; other accounts' jobs are one quiet line. When a job ends it leaves a dark "Done" line with View for seven seconds. On the dial, before anyone is chosen, it is one small dark line at the bottom with nothing to press. Background work is never invisible.
-- **Working panel:** every wait looks the same: the moving picture of that job (the landing page's vignettes), what is happening in plain words, the elapsed time, and that you can keep going.
+- **Working panel:** every wait is one line: a small moving picture of the job, what is happening in a few words, and a red bar with the elapsed time.
 - **Opening card:** the blinking alien and "Opening alienX" while the app reads this device's choices; the alien mark at the top left opens the landing page again, with Back to alienX.
 - **Upload (coming soon):** Add an account shows a dashed drop area for essays, posts or a PDF, marked Coming soon; nothing is sent yet.
 - **Feed preview:** the post as X's dark feed will show it (avatar, name, handle, text with its line breaks, the image, the action row), in the post dialog and behind each Create draft's On X / Edit switch.

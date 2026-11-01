@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
-import slots from "../config/slots.json" with { type: "json" };
+import shared from "../config/slots.json" with { type: "json" };
 import { claimDue, type Post } from "./db.ts";
+import { readLocal } from "./local.ts";
 import { at, local } from "./time.ts";
 
 export { at, local };
@@ -10,8 +11,18 @@ type Rules = { weekday: Window[]; weekend: Window[]; per_day: number; gap_min: n
 type Slots = { zone: string; step_min: number; accounts: Record<string, Rules> };
 const MIN = 60_000;
 
+// The shared defaults with this Mac's own per-handle windows (config/local.json, "slots") laid
+// over them. A "zone" key there moves scheduling to another time zone.
+export const withLocal = (base: Slots, own: Record<string, unknown> = {}): Slots => {
+  const { zone, ...accounts } = own;
+  return { ...base, zone: typeof zone === "string" && zone ? zone : base.zone, accounts: { ...base.accounts, ...(accounts as Record<string, Rules>) } };
+};
+const slots = withLocal(shared as Slots, readLocal().slots);
+// The zone posts are booked in. The pages still show India time (ZONE in lib/time.ts).
+export const zone = slots.zone;
+
 export function rules(handle: string, cfg: Slots = slots): Rules {
-  return cfg.accounts[handle] ?? cfg.accounts.default!;
+  return (Object.hasOwn(cfg.accounts, handle) && cfg.accounts[handle]) || cfg.accounts.default!;
 }
 
 const hm = (s: string) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5));
@@ -47,7 +58,7 @@ export function nextSlot(handle: string, from: Date, taken: string[], cfg: Slots
     if (full(new Date(t), held, r, cfg.zone)) continue;
     return new Date(t);
   }
-  throw new Error(`No free slot for @${handle} in the next 14 days. Loosen config/slots.json.`);
+  throw new Error(`No free slot for @${handle} in the next 14 days. Loosen its windows under "slots" in config/local.json, or the default in config/slots.json.`);
 }
 
 // A post dropped on another day keeps its time of day there. If that moment has passed it

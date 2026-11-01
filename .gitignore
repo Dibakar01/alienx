@@ -12,7 +12,13 @@ docs/handoff/
 # Private: who the accounts are and what they have written. alienX reads these from disk;
 # copy the .example files to start. Never commit the real ones.
 corpus/
-voices/*.json
-knowledge/*.md
+voices/*
+!voices/*.example
+knowledge/*
 !knowledge/*.example.md
-.impeccable/review/
+# Design-tool records; they quote real drafts.
+.impeccable/
+
+# This Mac's own setup: account order, figures, per-handle posting windows, team notes.
+config/local*
+PRODUCT.local.md

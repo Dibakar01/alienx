@@ -61,11 +61,11 @@ test("a drop on a day that already has its post is refused, not moved somewhere 
 });
 
 test("a tick notifies once for posts that came due, and the next tick stays quiet", () => {
-  createPost({ handle: "dibakaarr", posts: ["x"], claims: [], source: "seed", scheduled_at: "2026-11-02T03:00:00.000Z" });
-  createPost({ handle: "dibakaarr", posts: ["y"], claims: [], source: "seed", scheduled_at: "2026-11-09T03:00:00.000Z" });
+  createPost({ handle: "sam_writes", posts: ["x"], claims: [], source: "seed", scheduled_at: "2026-11-02T03:00:00.000Z" });
+  createPost({ handle: "sam_writes", posts: ["y"], claims: [], source: "seed", scheduled_at: "2026-11-09T03:00:00.000Z" });
   const said: string[] = [];
   const now = new Date("2026-11-02T04:00:00Z");
   assert.equal(tick(now, (m) => said.push(m)).length, 1);
   assert.equal(tick(now, (m) => said.push(m)).length, 0);
-  assert.deepEqual(said, ["A post is due: @dibakaarr. Open alienX to post."]);
+  assert.deepEqual(said, ["A post is due: @sam_writes. Open alienX to post."]);
 });

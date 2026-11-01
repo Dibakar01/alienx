@@ -40,7 +40,7 @@ export function startJob(job: { handle?: string; label: string; kind: Kind; wher
   };
 }
 
-function useActivity(): State {
+export function useActivity(): State {
   return useSyncExternalStore(
     (f) => {
       subs.add(f);
@@ -65,25 +65,33 @@ export function useSeconds(since: number | undefined): number {
 }
 export const useElapsed = (since: number | undefined) => (since ? clock(useSeconds(since)) : "");
 
+// How far along a job is, as a bar: it fills toward the usual time and waits near the end,
+// pulsing once it runs long. The time under it is the only words.
+export function Bar({ since, typical }: { since: number; typical: number }) {
+  const s = useSeconds(since);
+  const late = s > typical * 1.25;
+  const fill = Math.min(94, (s / typical) * 88);
+  return (
+    <span className="flex items-center gap-2">
+      <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-wash" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fill)} aria-label="Progress">
+        <span className={`block h-full rounded-full bg-brand transition-[width] duration-1000 ease-linear ${late ? "animate-pulse" : ""}`} style={{ width: `${fill}%` }} />
+      </span>
+      {/* The progressbar carries the value; the ticking clock stays out of live regions. */}
+      <span aria-hidden="true" className="shrink-0 text-xs text-muted tabular-nums">{clock(s)}</span>
+    </span>
+  );
+}
+
 function Running({ job, onGo }: { job: Job; onGo?: (w: Where) => void }) {
-  const s = useSeconds(job.since);
-  const late = s > job.typical * 1.25;
-  // An estimate, said as one: the bar fills toward "usual" and waits near the end.
-  const fill = Math.min(94, (s / job.typical) * 88);
   return (
     <div className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-3 max-sm:grid-cols-[minmax(0,1fr)_auto] max-sm:gap-2">
       {/* On a phone the moving picture goes, so the card stays one slim row above the dock. */}
       <span className="aspect-[5/3] overflow-hidden rounded-[8px] bg-wash max-sm:hidden">
         <Vignette kind={job.kind} />
       </span>
-      <span className="grid min-w-0 gap-1">
+      <span className="grid min-w-0 gap-1.5">
         <span className="truncate text-sm font-semibold">{job.label}</span>
-        <span className="h-1.5 overflow-hidden rounded-full bg-wash" aria-hidden="true">
-          <span className={`block h-full rounded-full bg-brand transition-[width] duration-1000 ease-linear ${late ? "animate-pulse" : ""}`} style={{ width: `${fill}%` }} />
-        </span>
-        <span className="text-xs text-muted tabular-nums max-sm:text-[11px]">
-          {clock(s)} · {late ? "taking longer than usual, still working" : `usually about ${clock(job.typical)}`}
-        </span>
+        <Bar since={job.since} typical={job.typical} />
       </span>
       {job.where && onGo && (
         <button type="button" className="btn px-3 py-1.5 text-xs" onClick={() => onGo(job.where!)}>
@@ -118,8 +126,11 @@ const Tick = ({ ok }: { ok: boolean }) => (
 // job in full and any others as lines under it, plus one quiet line for other accounts.
 // Without a place to go (the dial, before anyone is chosen): one small line at the bottom,
 // with nothing to press, so it never covers the dial or offers a button that goes nowhere.
-export function Activity({ onGo, only }: { onGo?: (w: Where) => void; only?: string }) {
-  const { jobs, ended } = useActivity();
+// `here` lists where results land on the screen in view: those jobs already show their
+// progress in place (the drafts, the discover card), so the card above the dock leaves them out.
+export function Activity({ onGo, only, here = [] }: { onGo?: (w: Where) => void; only?: string; here?: Where[] }) {
+  const { jobs: all, ended } = useActivity();
+  const jobs = onGo ? all.filter((j) => !j.where || !here.includes(j.where)) : all;
   if (!jobs.length && !ended.length) return null;
   const ours = (h?: string) => !h || !only || only === "all" || h === only;
 

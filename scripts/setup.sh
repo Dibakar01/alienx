@@ -21,7 +21,7 @@ ok "packages installed"
 
 echo; echo "Your private files (git-ignored, they stay on this Mac):"
 [ -f .env ] && ok ".env already there" || { cp .env.example .env; ok ".env created"; }
-[ -f knowledge/qalakaar-facts.md ] && ok "knowledge/qalakaar-facts.md already there" || { cp knowledge/qalakaar-facts.example.md knowledge/qalakaar-facts.md; ok "knowledge/qalakaar-facts.md created: fill in your company's facts"; }
+[ -f knowledge/facts.md ] || [ -f knowledge/qalakaar-facts.md ] && ok "your facts file is already there" || ok "facts: type them when you make your account (or copy knowledge/facts.example.md to knowledge/facts.md)"
 mkdir -p voices data
 
 echo; echo "Ready. Open it with:  npm run open   (or make a one-click app: npm run app)"

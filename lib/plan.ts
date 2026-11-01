@@ -3,10 +3,11 @@ import path from "node:path";
 import { z } from "zod";
 import { listAccounts, readAccount } from "./accounts.ts";
 import { ArtSpec, artPath, rasterize, renderArt } from "./art.ts";
-import { createPost, getPost, getTopic, listTopics, type Post, saveTopics, setTopic, takenSlots, type Topic, updatePost } from "./db.ts";
+import { createPost, getPost, getTopic, listPosts, listTopics, type Post, saveTopics, setTopic, takenSlots, type Topic, updatePost } from "./db.ts";
 import { ANGLES, facts, generate, voice } from "./generate.ts";
 import { ask, prompt } from "./llm.ts";
-import { local, nextSlot, osascript, rules } from "./schedule.ts";
+import { local, nextSlot, osascript, rules, zone } from "./schedule.ts";
+import { fit, liked, taste } from "./taste.ts";
 import { addDays } from "./time.ts";
 
 const Research = z.object({
@@ -50,33 +51,48 @@ export function slotFor(handle: string, now = new Date()): string {
   return nextSlot(handle, now, heldNear(handle, now)).toISOString();
 }
 
+// Ideas alienX drafted itself (its pick or a plan run) that nobody has approved yet. They
+// are not the person's decision, so taste does not count them as a like.
+// ponytail: killed posts are not listed, so a pick killed before kills marked its idea
+// skipped still counts as drafted.
+const unapproved = () => new Set(listPosts("", "9999").flatMap((p) => (p.picked && p.topic_id ? [p.topic_id] : [])));
+
+// What each person drafted and skipped, newest first, without alienX's unapproved picks.
+export function decisions(): Topic[] {
+  const auto = unapproved();
+  return [...listTopics("drafted").filter((t) => !auto.has(t.id)), ...listTopics("skipped")].sort((a, b) => b.id - a.id);
+}
+
 // Searches the web for one account and saves this week's topics, each with its sources.
 export async function research(handle: string, now = new Date()): Promise<Topic[]> {
   const account = readAccount(handle);
   const count = rules(handle).per_week;
   const pillars = account.pillars ?? [];
-  const recent = (["drafted", "skipped", "proposed"] as const)
-    .flatMap((s) => listTopics(s))
-    .filter((t) => t.handle === handle)
-    .slice(0, 20)
-    .map((t) => `- ${t.title}`);
+  // What came before, marked with what the person did with it, so new ideas lean toward what
+  // they draft and away from what they skip.
+  // An unapproved pick shows as waiting: the person has not said yes to it.
+  const auto = unapproved();
+  const history = (["drafted", "skipped", "proposed"] as const).flatMap((s) => listTopics(s)).filter((t) => t.handle === handle).sort((a, b) => b.id - a.id);
+  const recent = history.slice(0, 30).map((t) => `- [${t.status === "proposed" || auto.has(t.id) ? "waiting" : t.status}] ${t.title} (${t.angle}${t.pillar ? `, ${t.pillar}` : ""})`);
+  const { likes, dislikes } = liked(taste(decisions(), handle));
   const p = prompt("research", {
     min: String(Math.max(3, count)),
     count: String(count),
-    today: local(now, "Asia/Kolkata").day,
+    today: local(now, zone).day,
     facts: facts(),
     handle,
     voice: JSON.stringify(voice(account), null, 2),
     pillars: pillars.join(", ") || "none set",
     recent: recent.join("\n") || "(none yet)",
+    taste: [likes.length && `Drafts most: ${likes.join(", ")}.`, dislikes.length && `Skips most: ${dislikes.join(", ")}.`].filter(Boolean).join(" ") || "(not enough decisions yet)",
   });
   const r = await ask(Research, p.system, p.user, { tools: ["WebSearch", "WebFetch"], timeoutMs: 20 * 60_000 });
   // Only what is new: a finding older than three weeks is dropped, whatever the model said.
-  const today = local(now, "Asia/Kolkata").day;
+  const today = local(now, zone).day;
   const fresh = r.findings.map((f) => (f.date >= addDays(today, -21) && f.date <= today ? f : null));
   return saveTopics(
     handle,
-    local(now, "Asia/Kolkata").day,
+    local(now, zone).day,
     r.topics.slice(0, count).map((t) => ({
       title: t.title,
       pillar: t.pillar && pillars.includes(t.pillar) ? t.pillar : undefined,
@@ -152,9 +168,12 @@ export async function pickFor(handle: string, now = new Date()): Promise<Post | 
   if (!voiced(handle) || takenSlots(handle, now.toISOString()).length) return null;
   let ideas = listTopics("proposed").filter((t) => t.handle === handle);
   if (!ideas.length) ideas = await research(handle, now);
-  // A mix: not the same angle as the last idea it drafted, when another is waiting.
+  // The idea that fits what this person drafts and skips best, but not the same angle as the
+  // last idea it drafted when another is waiting, so the week stays a mix.
+  const likes = taste(decisions(), handle);
   const last = listTopics("drafted").find((t) => t.handle === handle)?.angle;
-  const best = ideas.find((t) => t.angle !== last) ?? ideas[0];
+  const ranked = [...ideas].sort((a, b) => fit(b, likes) - fit(a, likes));
+  const best = ranked.find((t) => t.angle !== last) ?? ranked[0];
   return best ? draftTopic(best.id, true) : null;
 }
 

@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import type { Draft, Post, Topic } from "../lib/db.ts";
+import type { Taste } from "../lib/taste.ts";
 import { LIMIT, problems, weighted } from "../lib/post.ts";
 import { type AccountInfo, Accounts, type Upkeep } from "./accounts.tsx";
 import { changePostAction, decideAction, scheduleAction } from "./actions.ts";
 import { local, when, ZONE } from "../lib/time.ts";
 import { suggest } from "../lib/suggest.ts";
 import { fills, recommend } from "./create-pick.ts";
-import { startJob } from "./activity.tsx";
+import { Bar, startJob, type Where } from "./activity.tsx";
+import { Vignette } from "./vignettes.tsx";
+import { artVersion, draw } from "./drawing.ts";
 import { Ideas } from "./ideas.tsx";
-import { dismiss as dismissFor, readDismissed } from "./dismissed.ts";
 import { Working } from "./working.tsx";
 import { Mascot } from "./mascot.tsx";
 import { ViewTitle } from "./title.tsx";
@@ -23,8 +25,6 @@ type Status = Draft["status"];
 // `topicId` links drafts made from a discovered idea, so approving one keeps its sources.
 // `rec` is the draft alienX recommends, with the reason built from its signals.
 type DraftSet = { drafts: Draft[]; allow: Allow; asked: string; topicId?: number; rec?: { id: number; angle: string; reason: string } };
-// What alienX would do next, offered once a draft is approved: one press, or Not now.
-type Next = { text: string; label: string; go: () => void; dismiss: () => void };
 // What a set of drafts was made from: an idea (with its id) or your own words.
 type Origin = { title: string; idea?: Topic };
 
@@ -38,6 +38,14 @@ const ANGLES: Record<string, string> = {
 const STORE = "alienx.accounts";
 // Suggestions set aside with Not now, remembered for the day.
 
+// A laptop-wide screen (Tailwind's lg), where the ideas stay beside open drafts.
+const WIDE = "(min-width: 64rem)";
+const onWide = (f: () => void) => {
+  const m = matchMedia(WIDE);
+  m.addEventListener("change", f);
+  return () => m.removeEventListener("change", f);
+};
+
 // Create: where a post gets made, as one surface that moves on by itself. alienX's recommendation leads,
 // your own words sit under it, the other ideas follow. One press on an idea (or on Write for
 // your own words) starts five drafts in the account's voice; the drafts open beside the ideas
@@ -46,22 +54,27 @@ const STORE = "alienx.accounts";
 // never scrolls; the lists and the draft scroll inside themselves.
 // `start` asks for an idea to be drafted (from a Studio suggestion); each new `at` is a new ask.
 // `posts` and `now` let alienX ground its suggestions in the calendar; without them it stays quiet.
+// `onHere` hears which jobs show their progress on screen right now (the drafts, the discover card).
 export function Studio({
   accounts,
   topics = [],
+  tastes = {},
   start,
   posts,
   now,
   onOpenStudio,
   onAbout,
+  onHere,
 }: {
   accounts: AccountInfo[];
   topics?: Topic[];
+  tastes?: Record<string, Taste>;
   start?: { topicId: number; at: number } | null;
   posts?: Post[];
   now?: string;
-  onOpenStudio?: () => void;
+  onOpenStudio?: (postId?: number) => void;
   onAbout?: () => void;
+  onHere?: (w: Where[]) => void;
 }) {
   const ready = accounts.filter((a) => a.ready);
   const [chosen, setChosen] = useState<string[]>(ready.slice(0, 1).map((a) => a.handle));
@@ -101,9 +114,6 @@ export function Studio({
   // (an ask that was already there when the page opened is not a new one).
   const viewRef = useRef("");
   const seen = useRef(start?.at);
-  const [dismissed, setDismissed] = useState<string[]>([]);
-  useEffect(() => setDismissed(readDismissed(local(now ? new Date(now) : new Date(), ZONE).day)), [now]);
-  const today = local(now ? new Date(now) : new Date(), ZONE).day;
 
   // Come back to the accounts used last time.
   useEffect(() => {
@@ -140,21 +150,32 @@ export function Studio({
   const picked = (h: string) => Boolean(sets[h]?.drafts.some((d) => statusOf(d) === "approved"));
   const solo = accounts.length === 1;
   const open = pane === "drafts" && authors.length > 0;
+  // What shows its progress in place: the open drafts, and the discover card when the ideas
+  // are on screen (beside the drafts on a laptop, in their place on a phone).
+  const wide = useSyncExternalStore(onWide, () => matchMedia(WIDE).matches, () => false);
+  const [ideasHere, setIdeasHere] = useState<Where[]>([]);
+  const here = [...(open ? ["drafts" as const] : []), ...(!open || wide ? ideasHere : [])];
+  useEffect(() => {
+    onHere?.(here);
+    // Only a change in what is on screen matters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [here.join()]);
   // Drafts waiting for a decision are open: red belongs to Approve, not to the ideas.
   const deciding = open && Boolean(viewSet) && !picked(view);
+  // At most a few words under the box, and only when something needs saying.
   const hint = pickingBusy
-    ? "Drafting. About half a minute."
+    ? ""
     : solo && !ready.length
-      ? "No voice yet. Teach it with past posts first."
+      ? "No voice yet. Teach it first."
       : !picking.length
-        ? "Choose who is posting first."
+        ? "Pick who is posting."
         : !seed.trim()
           ? nudge
             ? "Type a thought first."
-            : "A thought, something you noticed, a link. Cmd or Ctrl + Enter writes."
+            : ""
           : repeat
-            ? `Same thought. This makes ${picking.length * 5} new drafts.`
-            : "Cmd or Ctrl + Enter works too.";
+            ? "Same thought: new drafts."
+            : "";
 
   const choose = (next: string[]) => {
     setChosen(next);
@@ -245,19 +266,9 @@ export function Studio({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [start]);
 
-  // What alienX would do next, from the calendar and the waiting ideas: the open days it would fill.
+  // The open days alienX would fill with a waiting idea, from the calendar and the cadence.
   const hints = posts ? suggest(accounts, posts, topics, now ? new Date(now) : new Date()) : [];
   const fillOf = fills(hints);
-  const dismiss = (id: string) => setDismissed(dismissFor(today, id));
-  let next: Next | undefined;
-  for (const s of hints) {
-    if (s.action.type !== "draft" || dismissed.includes(s.id)) continue;
-    const id = s.action.topicId;
-    const t = topics.find((x) => x.id === id);
-    if (!t || t.id === origin[view]?.idea?.id || tried.includes(t.id)) continue;
-    next = { text: s.text, label: s.label, go: () => draftIdea(t), dismiss: () => dismiss(s.id) };
-    break;
-  }
 
   // Back to the ideas, with the next pick in focus.
   const another = () => {
@@ -354,7 +365,7 @@ export function Studio({
             run();
           }
         }}
-        placeholder="What's on your mind?"
+        placeholder="A thought, a link, something you noticed…"
         maxLength={4000}
         className="field min-h-[4.5rem] resize-none"
       />
@@ -391,9 +402,11 @@ export function Studio({
           {label}
         </button>
       </div>
-      <p className={`text-xs ${nudge ? "font-semibold text-ink" : "text-muted"}`} aria-live="polite">
-        {hint}
-      </p>
+      {hint && (
+        <p className={`text-xs ${nudge ? "font-semibold text-ink" : "text-muted"}`} aria-live="polite">
+          {hint}
+        </p>
+      )}
     </form>
   );
 
@@ -405,7 +418,7 @@ export function Studio({
         </button>
         <div className="min-w-0">
           <ViewTitle name="Create" who={accounts.length === 1 ? accounts[0]!.name : accounts.length === 3 ? "all three" : "all accounts"} />
-          <p className="truncate text-sm text-snow-muted max-sm:hidden">Pick an idea or write your own. Approve the draft you like and it goes on the calendar.</p>
+          <p className="truncate text-sm text-snow-muted max-sm:hidden">Pick an idea. alienX writes five drafts. Approve one.</p>
         </div>
         {/* The drafts are kept while you look at the ideas; this brings them back. */}
         {pane === "ideas" && authors.length > 0 && (
@@ -427,12 +440,13 @@ export function Studio({
             onDraft={draftIdea}
             busy={busy}
             fillOf={fillOf}
+            tastes={tastes}
             active={origin[view]?.idea?.id}
             tried={tried}
             quiet={deciding || own}
-            wide={!open}
             composer={composer}
             onTeach={() => openUpkeep("posts", accounts[0]!.handle)}
+            onHere={setIdeasHere}
           />
         </section>
 
@@ -468,13 +482,13 @@ export function Studio({
             )}
 
             {viewSet && (
-              <fieldset className="flex min-w-0 flex-wrap border-b border-line max-sm:justify-between">
+              <fieldset className="deal-row flex min-w-0 flex-wrap border-b border-line max-sm:justify-between">
                 <legend className="sr-only">Angle</legend>
-                {Object.keys(ANGLES).map((name) => {
+                {Object.keys(ANGLES).map((name, i) => {
                   const d = viewSet.drafts.find((x) => x.angle === name);
                   const s = d && statusOf(d);
                   return (
-                    <label key={name} title={ANGLES[name]} className={`tab max-sm:px-0 max-sm:tracking-[0.03em] ${s === "rejected" ? "line-through" : ""}`}>
+                    <label key={name} title={ANGLES[name]} style={{ "--i": i } as React.CSSProperties} className={`tab max-sm:px-0 max-sm:tracking-[0.03em] ${s === "rejected" ? "line-through" : ""}`}>
                       <input type="radio" name="angle" value={name} checked={angle === name} onChange={() => setAngle(name)} className="sr-only" />
                       {name}
                       {viewSet.rec?.angle === name && (
@@ -496,9 +510,9 @@ export function Studio({
                 <div className="grid flex-1 place-items-center rounded-card bg-wash">
                   <Working
                     kind="draft"
-                    title="Studying the human."
-                    note={`Writing five angles for @${view} (story, contrarian, observation, lesson, question), each checked against X's rules. About half a minute; the ideas stay usable meanwhile.`}
+                    title={`Writing five drafts for @${view}`}
                     since={busyAt[view]}
+                    typical={35}
                   />
                 </div>
               ) : errors[view] ? (
@@ -520,7 +534,6 @@ export function Studio({
                     account={accounts.find((a) => a.handle === h)}
                     topicId={set.topicId}
                     recommend={set.rec?.id === d.id ? set.rec.reason : undefined}
-                    next={next}
                     onOpenStudio={onOpenStudio}
                     onAnother={another}
                     onDecided={(status) => setDecided((all) => ({ ...all, [d.id]: status }))}
@@ -566,7 +579,6 @@ function Card({
   account,
   topicId,
   recommend,
-  next,
   onOpenStudio,
   onAnother,
   onDecided,
@@ -578,8 +590,7 @@ function Card({
   account?: AccountInfo;
   topicId?: number;
   recommend?: string;
-  next?: Next;
-  onOpenStudio?: () => void;
+  onOpenStudio?: (postId?: number) => void;
   onAnother: () => void;
   onDecided: (status: Status) => void;
 }) {
@@ -604,6 +615,9 @@ function Card({
 
   // The scheduled post this draft became, so Undo can take it off the schedule again.
   const [scheduled, setScheduled] = useState<{ id: number; at: string } | null>(null);
+  // Its picture: when drawing started (0 when idle), and a version once it is drawn.
+  const [drawing, setDrawing] = useState(0);
+  const [art, setArt] = useState("");
 
   const decide = (next: Status) =>
     start(async () => {
@@ -632,15 +646,17 @@ function Card({
       navigator.vibrate?.(12); // a small knock on phones, as the stamp lands
       setStatus("approved");
       onDecided("approved");
-      const drawn = startJob({ handle: draft.handle, label: `Drawing the picture for @${draft.handle}`, kind: "picture", where: "week", typical: 35 });
-      void fetch("/api/art", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: result.post.id }) })
-        .then((r) => r.json() as Promise<{ error?: string }>)
-        .then((r) => drawn(r.error ? { ok: false, text: `The picture for @${draft.handle} did not draw. Redraw it in the Studio.` } : { ok: true, text: `Picture ready. The post is on the Studio calendar.` }))
-        .catch(() => drawn({ ok: false, text: "The picture did not draw. Redraw it in the Studio." }));
+      // The finished picture's View goes to the calendar, where the approved post now lives.
+      const d = draw(result.post.id, draft.handle, "week");
+      setDrawing(d.since);
+      void d.done.then((p) => {
+        setDrawing(0);
+        if (p) setArt(artVersion(p));
+      });
     });
 
   return (
-    <article hidden={hidden} aria-label={`${draft.angle}: ${ANGLES[draft.angle]}`} className="flex min-h-0 flex-1 flex-col gap-3 pt-1">
+    <article hidden={hidden} aria-label={`${draft.angle}: ${ANGLES[draft.angle]}`} className="draft-card flex min-h-0 flex-1 flex-col gap-3 pt-1">
       <div className="flex items-center justify-between gap-3">
         <span className="label">{single ? ANGLES[draft.angle] : `Post ${page + 1} of ${posts.length}`}</span>
         <span className="segmented" style={{ "--at": mode === "preview" ? 0 : 1 } as React.CSSProperties} role="group" aria-label="Show">
@@ -745,39 +761,33 @@ function Card({
       {/* One action on the draft: Approve. Once decided, the row turns into what happened and
           where to go next, in place. Reject with a reason stays quiet beside Approve. */}
       {status === "approved" ? (
-        <div className="reveal grid gap-3 rounded-card border-2 border-ink p-3.5 sm:p-4" role="status">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <span className="stamp stamp-solid">approved</span>
-            <p className="min-w-0 flex-1 font-semibold">{scheduled ? `On the Studio calendar for ${when(scheduled.at)} IST` : "Approved. The next drafts learn from this."}</p>
+        // Approved: the post and its picture, drawn right here, then the two ways on.
+        <div className="reveal grid gap-3 rounded-card border-2 border-ink p-3 sm:p-3.5" role="status">
+          <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[9rem_minmax(0,1fr)]">
+            <div className="relative aspect-[16/9] overflow-hidden rounded-[6px] bg-wash">
+              {art ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={`/api/art?id=${scheduled!.id}&v=${art}`} alt="" className="deal size-full object-cover" />
+              ) : (
+                <Vignette kind="picture" />
+              )}
+            </div>
+            <div className="grid min-w-0 gap-1.5">
+              <span className="stamp stamp-solid justify-self-start">approved</span>
+              <p className="truncate font-semibold">{scheduled ? `${when(scheduled.at)} IST` : "Approved"}</p>
+              {drawing ? <Bar since={drawing} typical={35} /> : !art && scheduled && <p className="text-xs text-muted">No picture yet. Draw it from the post.</p>}
+            </div>
           </div>
-          {scheduled && <p className="text-sm text-muted">{topicId ? "Its picture, sources and first reply are being made." : "Its picture is being drawn."}</p>}
           <div className="flex flex-wrap items-center gap-2">
             {scheduled && onOpenStudio && (
-              <button type="button" className="btn btn-primary px-5" onClick={onOpenStudio}>
-                See it in Studio
+              <button type="button" className="btn btn-primary px-5" onClick={() => onOpenStudio(scheduled.id)}>
+                Open the post
               </button>
             )}
             <button type="button" className="btn" onClick={onAnother}>
               Make another
             </button>
-            <button type="button" className="link ml-auto text-muted" disabled={busy} onClick={() => decide("draft")}>
-              Undo
-            </button>
           </div>
-          {scheduled && next && (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-3 text-sm">
-              <p className="min-w-0 flex-1 basis-56">
-                <span className="font-semibold">Next: </span>
-                {next.text}
-              </p>
-              <button type="button" className="btn" onClick={next.go}>
-                {next.label}
-              </button>
-              <button type="button" className="link text-xs text-muted" onClick={next.dismiss}>
-                Not now
-              </button>
-            </div>
-          )}
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">

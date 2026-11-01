@@ -1,22 +1,18 @@
 "use client";
 
-// The loading state for real work: a moving picture of the job, what is happening in plain
-// words, how long it has taken, and that you can keep going. One look for every wait.
-import { useElapsed } from "./activity.tsx";
+// The loading state for real work, in one line: a small moving picture of the job, what is
+// happening, and a bar for how far along it is. One look for every wait.
+import { Bar } from "./activity.tsx";
 import { type Kind, Vignette } from "./vignettes.tsx";
 
-export function Working({ kind, title, note, since, compact = false }: { kind: Kind; title: string; note?: string; since?: number; compact?: boolean }) {
-  const elapsed = useElapsed(since);
+export function Working({ kind, title, since, typical = 60, compact = false }: { kind: Kind; title: string; since?: number; typical?: number; compact?: boolean }) {
   return (
-    <div role="status" aria-live="polite" className={`grid justify-items-center gap-2 text-center ${compact ? "grid-cols-[6rem_minmax(0,1fr)] items-center justify-items-start text-left" : "px-4 py-6"}`}>
-      <div className={`overflow-hidden rounded-[8px] bg-wash ${compact ? "row-span-2 w-24" : "w-52"} aspect-[5/3]`}>
+    <div role="status" aria-live="polite" className={`grid items-center gap-x-3 gap-y-1.5 ${compact ? "grid-cols-[4.5rem_minmax(0,1fr)]" : "mx-auto w-full max-w-sm grid-cols-[6rem_minmax(0,1fr)] px-2 py-4"}`}>
+      <div className="row-span-2 aspect-[5/3] overflow-hidden rounded-[8px] bg-wash">
         <Vignette kind={kind} />
       </div>
-      <p className="font-semibold">
-        {title}
-        {elapsed && <span className="ml-2 font-normal text-muted tabular-nums">{elapsed}</span>}
-      </p>
-      {note && <p className={`text-sm text-muted ${compact ? "" : "max-w-sm"}`}>{note}</p>}
+      <p className="truncate font-semibold">{title}</p>
+      {since ? <Bar since={since} typical={typical} /> : <span />}
     </div>
   );
 }

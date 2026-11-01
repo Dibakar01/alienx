@@ -1,16 +1,16 @@
-// Account avatars, drawn as small cut-paper portraits in the One Flow palette. Placeholders
-// until real photos exist: the brand is the alien, Dibakar and Ansh have their own figures,
-// and any other account gets its initial. Colours come from the theme tokens.
+// Account avatars, drawn as small cut-paper portraits in the One Flow palette. A brand is the
+// alien; a person can be given a figure in config/local.json; anyone else gets their initial.
+// Colours come from the theme tokens.
 import { Mascot } from "./mascot.tsx";
 
-type Who = { handle: string; name: string; type: "personal" | "brand" };
+type Who = { handle: string; name: string; type: "personal" | "brand"; figure?: string | null };
 
 // Shoulders and neck, shared by the portraits.
 const BODY = "M14 100C16 78 30 68 50 68S84 78 86 100Z";
 const NECK = "M42 58h16v13a8 8 0 0 1-16 0Z";
 
-function Dibakar() {
-  // Wavy hair swept up, red headphones: music and growth.
+function Headphones() {
+  // Wavy hair swept up, red headphones.
   return (
     <>
       <path d={BODY} fill="var(--black)" />
@@ -25,8 +25,8 @@ function Dibakar() {
   );
 }
 
-function Ansh() {
-  // Neat side-parted hair, square glasses, a red code bracket on the shirt: tech.
+function Glasses() {
+  // Neat side-parted hair, square glasses, a red code bracket on the shirt.
   return (
     <>
       <path d={BODY} fill="var(--black)" />
@@ -41,10 +41,10 @@ function Ansh() {
   );
 }
 
-const PORTRAITS: Record<string, () => React.ReactNode> = { dibakaarr: Dibakar, anshsarkar_: Ansh };
+const FIGURES: Record<string, () => React.ReactNode> = { headphones: Headphones, glasses: Glasses };
 
 export function Avatar({ who, size = 48, className = "" }: { who: Who; size?: number; className?: string }) {
-  const Portrait = PORTRAITS[who.handle];
+  const Portrait = who.figure ? FIGURES[who.figure] : undefined;
   const box = { width: size, height: size };
   if (who.type === "brand")
     return (

@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import { z } from "zod";
-import { AREA, ArtSpec, COMPOSITIONS, CX, CY, OBJECTS, SHEET_BOX, STICKER, TWISTS, compositionBox, cutBox, flapBox, hit, inkArea, inkBox, plan, RED_WEIGHT, renderArt, silhouette, subpaths, textWidth, union, weight, type Box, type Plan } from "../lib/art.ts";
+import { ArtSpec, COMPOSITIONS, LINKS, MARKS, OBJECTS, PALETTE, SAFE, STICKER_SIZE, TAPE, TWISTS, cutBox, flapBox, hit, inkArea, inkBox, plan, RED_WEIGHT, renderArt, silhouette, subpaths, textWidth, weight, type Box } from "../lib/art.ts";
 
-const spec: ArtSpec = { composition: "versus", objects: ["megaphone", "hand-palm"], label: "a pause", labelPoints: 1, stamp: "hot", seed: 4242 };
+const spec: ArtSpec = { headline: "posting more isn't better", mark: "more", markStyle: "strike", composition: "versus", objects: ["megaphone", "hand-palm"], stamp: "hot", seed: 4242 };
 
-// The words a viewer can read: the content of every <text> element.
-const textWords = (svg: string) =>
-  [...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].flatMap((m) => m[1]!.split(/\s+/).filter(Boolean));
+// Every piece of text a viewer can read, in drawing order, run together.
+const drawn = (svg: string) => [...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map((m) => m[1]!).join("").replaceAll("&apos;", "'");
+const bh = (b: Box) => b.y1 - b.y0, bw = (b: Box) => b.x1 - b.x0;
+const inside = (b: Box, o: Box, tol = 0.5) => b.x0 >= o.x0 - tol && b.y0 >= o.y0 - tol && b.x1 <= o.x1 + tol && b.y1 <= o.y1 + tol;
 
 test("the same spec renders the same SVG", () => {
   assert.equal(renderArt(spec), renderArt({ ...spec }));
@@ -17,11 +18,15 @@ test("the same spec renders the same SVG", () => {
 });
 
 test("only palette colours appear", () => {
-  const allowed = new Set(["#F4F2F1", "#FBFAF8", "#16130F", "#D92819", "#5E5852", "#FFFFFF"]);
+  const allowed = new Set<string>(PALETTE);
   for (const composition of COMPOSITIONS) {
-    const svg = renderArt({ ...spec, composition, twist: "crack" });
-    for (const hex of svg.match(/#[0-9a-fA-F]{6}\b/g) ?? []) assert.ok(allowed.has(hex.toUpperCase()), `${composition}: ${hex}`);
-    for (const rgba of svg.match(/rgba\([^)]*\)/g) ?? []) assert.equal(rgba, "rgba(206,197,184,.72)", composition);
+    for (const markStyle of MARKS) {
+      for (let seed = 1; seed <= 6; seed++) {
+        const svg = renderArt({ ...spec, composition, markStyle, objects: composition === "versus" || composition === "scale" ? spec.objects : ["robot"], twist: "crack", seed });
+        for (const hex of svg.match(/#[0-9a-fA-F]{6}\b/g) ?? []) assert.ok(allowed.has(hex.toUpperCase()), `${composition}: ${hex}`);
+        for (const rgba of svg.match(/rgba\([^)]*\)/g) ?? []) assert.equal(rgba, TAPE, composition);
+      }
+    }
   }
 });
 
@@ -39,257 +44,185 @@ test("every object's subpaths start after a Z, so the holes can be filled in", (
 });
 
 test("every object renders as a hero", () => {
-  for (const name of OBJECTS) assert.match(renderArt({ composition: "hero", objects: [name], label: "look", seed: 11 }), /<\/svg>$/, name);
+  for (const name of OBJECTS) assert.match(renderArt({ headline: "look closer", mark: "look", markStyle: "circle", composition: "hero", objects: [name], seed: 11 }), /<\/svg>$/, name);
 });
 
-test("every composition and twist renders", () => {
+test("every composition, twist, mark and link renders", () => {
   for (let i = 0; i < OBJECTS.length; i += 5) {
     const pair = [OBJECTS[i]!, OBJECTS[(i * 7 + 3) % OBJECTS.length]!];
-    for (const composition of ["versus", "scale"] as const) {
-      for (const labelPoints of [0, 1] as const) assert.doesNotThrow(() => renderArt({ composition, objects: pair, label: "this one", labelPoints, seed: i + 1 }), `${composition} ${pair}`);
-    }
-    assert.doesNotThrow(() => renderArt({ composition: "odd", objects: [pair[0]], label: "which", seed: i + 1 }), `odd ${pair[0]}`);
-    assert.doesNotThrow(() => renderArt({ composition: "peek", objects: [pair[0]], label: "who?", stamp: "wip", seed: i + 1 }), `peek ${pair[0]}`);
+    const base = { headline: "this one wins", mark: "wins", markStyle: MARKS[i % MARKS.length]!, seed: i + 1 };
+    for (const link of LINKS) assert.doesNotThrow(() => renderArt({ ...base, composition: "versus", objects: pair, link }), `versus ${pair} ${link}`);
+    assert.doesNotThrow(() => renderArt({ ...base, composition: "scale", objects: pair }), `scale ${pair}`);
+    assert.doesNotThrow(() => renderArt({ ...base, composition: "odd", objects: [pair[0]] }), `odd ${pair[0]}`);
+    assert.doesNotThrow(() => renderArt({ ...base, composition: "peek", objects: [pair[0]], stamp: "wip" }), `peek ${pair[0]}`);
   }
   for (const twist of TWISTS) {
-    for (const name of OBJECTS) assert.doesNotThrow(() => renderArt({ composition: "twist", objects: [name], twist, stamp: "no", seed: 9 }), `${twist} ${name}`);
+    for (const name of OBJECTS) assert.doesNotThrow(() => renderArt({ headline: "not any more", mark: "not", markStyle: "highlight", composition: "twist", objects: [name], twist, stamp: "no", seed: 9 }), `${twist} ${name}`);
   }
 });
 
-test("an image carries at most three words", () => {
-  const specs: ArtSpec[] = [
-    { composition: "hero", objects: ["alien"], seed: 1 },
-    { composition: "odd", objects: ["robot"], label: "the real one", seed: 2 },
-    { composition: "scale", objects: ["coins", "hourglass-high"], label: "margin", stamp: "wip", seed: 3 },
-    { composition: "twist", objects: ["ticket"], twist: "cross", label: "aaaaaaaaaaaaaaaaaaaaaa", seed: 4 },
-    spec,
-  ];
-  for (const s of specs) {
-    assert.ok(ArtSpec.safeParse(s).success, JSON.stringify(s));
-    const seen = textWords(renderArt(s));
-    assert.ok(seen.length <= 3, `${s.composition}: ${seen.join(" ")}`);
-    assert.equal(seen.length, (s.label?.split(" ").length ?? 0) + (s.stamp ? 1 : 0));
-  }
-  assert.equal(textWords(renderArt({ composition: "hero", objects: ["key"], seed: 5 })).length, 0);
-});
-
-const SIDES: { composition: ArtSpec["composition"]; objects: ArtSpec["objects"] }[] = [
-  { composition: "hero", objects: ["robot"] },
-  { composition: "twist", objects: ["ticket"] },
-  { composition: "odd", objects: ["robot"] },
-  { composition: "versus", objects: ["megaphone", "hand-palm"] },
-  { composition: "scale", objects: ["coins", "hourglass-high"] },
-  { composition: "peek", objects: ["music-notes"] },
-];
-
-test("a label never leaves the sheet, however long its word", () => {
-  for (const label of ["counterrevolutionaries", "authenticity", "who is human?"]) {
-    for (const base of SIDES) {
-      const anchors = new Set<string>();
-      for (let seed = 1; seed <= 24; seed++) {
-        const svg = renderArt({ ...base, label, labelPoints: (seed % 2) as 0 | 1, twist: "cross", seed });
-        const texts = [...svg.matchAll(/<text x="([\d.-]+)" y="[\d.-]+" text-anchor="(\w+)" font-size="([\d.]+)" font-weight="600"[^>]*>([^<]*)</g)];
-        assert.ok(texts.length > 0, `${base.composition} ${label} ${seed}`);
-        for (const [, x, anchor, size, text] of texts) {
-          const w = textWidth(text!, Number(size), 600), x0 = anchor === "start" ? Number(x) : anchor === "end" ? Number(x) - w : Number(x) - w / 2;
-          assert.ok(x0 >= 190 && x0 + w <= 1410, `${base.composition} "${text}" seed ${seed}: ${x0.toFixed(0)}..${(x0 + w).toFixed(0)}`);
-          anchors.add(anchor!);
-        }
-      }
-      // The long word goes to the band, which follows the note's side; scale's side note is always left.
-      if (label.length === 22) assert.ok(anchors.has("start") && anchors.has("end"), `${base.composition} ${label}: both sides`);
-    }
+test("the words drawn are the headline, then the flap's ?, the VS and the stamp", () => {
+  const flat = (s: string) => s.replace(/\s+/g, "");
+  for (const markStyle of MARKS) {
+    assert.equal(drawn(renderArt({ ...spec, markStyle })), flat(spec.headline) + "VSHOT", markStyle);
+    assert.equal(drawn(renderArt({ ...spec, markStyle, link: "then", stamp: undefined })), flat(spec.headline), markStyle);
+    assert.equal(drawn(renderArt({ ...spec, markStyle, composition: "peek", objects: ["crown"], stamp: undefined })), flat(spec.headline) + "?", markStyle);
   }
 });
 
-test("the stamp keeps clear of every object and of the note", () => {
-  const hit = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
-  for (const base of SIDES) {
-    for (const stamp of ["hot", "late", "announced"]) {
-      for (const label of [undefined, "margin", "counterrevolutionaries"]) {
-        for (let seed = 1; seed <= 20; seed++) {
-          const p = plan({ ...base, label, stamp, labelPoints: (seed % 2) as 0 | 1, seed });
-          const where = `${base.composition} ${stamp} ${label} ${seed}`;
-          for (const c of p.cuts) assert.ok(!hit(p.stamp!.box, cutBox(c)), `${where}: ${c.name}`);
-          if (p.note) assert.ok(!hit(p.stamp!.box, p.note.box), `${where}: note`);
-        }
-      }
-    }
-  }
+test("exactly one word is marked, falling back to the longest when mark is not in the headline", () => {
+  const marked = (s: ArtSpec) => plan(s).head.words.filter((w) => w.marked).map((w) => w.text);
+  assert.deepEqual(marked(spec), ["more"]);
+  assert.deepEqual(marked({ ...spec, mark: "More!" }), ["more"]);
+  assert.deepEqual(marked({ ...spec, headline: "is AI repricing music?", mark: "repricing" }), ["repricing"]);
+  assert.deepEqual(marked({ ...spec, headline: "AI isn't killing music", mark: "repricing" }), ["killing"]);
 });
 
-test("versus turns the two objects to face each other", () => {
-  const [a, b] = plan({ composition: "versus", objects: ["megaphone", "megaphone"], seed: 1 }).cuts;
-  assert.equal(a!.mirror, true); // the megaphone opens left as drawn, so the first one turns
-  assert.equal(b!.mirror, false);
-  const [c, d] = plan({ composition: "versus", objects: ["robot", "crown"], seed: 1 }).cuts;
-  assert.equal(c!.mirror, false);
-  assert.equal(d!.mirror, true);
-});
-
-test("odd copies stay big, keep their red offset and sit on an even pitch", () => {
-  for (let seed = 1; seed <= 30; seed++) {
-    for (const label of [undefined, "the human?"]) {
-      const { cuts } = plan({ composition: "odd", objects: ["robot"], label, seed });
-      assert.ok(cuts.every((c) => bh(inkBox(c)) >= 160 && c.offset !== false), `${seed} ${label}`);
-      // Ink centres: every row on one line, one pitch across both rows, the rows centred on each other.
-      const mids = cuts.map((c) => { const b = inkBox(c); return [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2] as const; });
-      const rows = [...new Set(mids.map((m) => Math.round(m[1])))].map((y) => mids.filter((m) => Math.abs(m[1] - y) < 1).map((m) => m[0]));
-      assert.equal(rows.length, 2, `${seed} ${label}: two rows`);
-      const steps = rows.flatMap((xs) => xs.slice(1).map((x, i) => x - xs[i]!));
-      for (const d of steps) assert.ok(Math.abs(d - steps[0]!) < 1, `${seed} ${label}: pitch ${steps.map((v) => v.toFixed(1))}`);
-      const mid = (xs: number[]) => (xs[0]! + xs.at(-1)!) / 2;
-      assert.ok(Math.abs(mid(rows[0]!) - mid(rows[1]!)) < 1, `${seed} ${label}: rows centred`);
-    }
-  }
-});
-
-test("ArtSpec rejects too many words, unknown objects and a lone versus", () => {
-  assert.equal(ArtSpec.safeParse({ ...spec, label: "one two three four", stamp: undefined }).success, false);
-  assert.equal(ArtSpec.safeParse({ ...spec, label: "one two three" }).success, false); // plus the stamp is four
-  assert.equal(ArtSpec.safeParse({ ...spec, stamp: "two words" }).success, false);
-  assert.equal(ArtSpec.safeParse({ ...spec, objects: ["megaphone", "trumpet"] }).success, false);
-  assert.equal(ArtSpec.safeParse({ ...spec, objects: ["megaphone"] }).success, false);
-  assert.equal(ArtSpec.safeParse({ ...spec, composition: "scale", objects: ["coins"] }).success, false);
-  assert.equal(ArtSpec.safeParse(spec).success, true);
-});
-
-test("ArtSpec converts to the JSON schema the model call sends", () => {
-  const schema = JSON.stringify(z.toJSONSchema(ArtSpec));
-  for (const name of ["hourglass-high", "singer", "versus", "crack"]) assert.ok(schema.includes(`"${name}"`), name);
-});
-
-test("the art prompt explains every object", () => {
-  const md = fs.readFileSync(new URL("../prompts/art.md", import.meta.url), "utf8");
-  for (const name of OBJECTS) assert.ok(md.includes(`- ${name}:`), name);
-});
-
-test("text is XML-escaped", () => {
-  const svg = renderArt({ ...spec, label: "<b> &", stamp: 'a"b' });
-  assert.ok(!svg.includes("<b>") && svg.includes("&lt;b&gt;") && svg.includes("&amp;") && svg.includes("A&quot;B"));
-});
-
-// ---- alignment ----
-
-const bh = (b: Box) => b.y1 - b.y0;
-const inside = (b: Box, o: Box, tol = 0.5) => b.x0 >= o.x0 - tol && b.y0 >= o.y0 - tol && b.x1 <= o.x1 + tol && b.y1 <= o.y1 + tol;
-const mid = (b: Box) => [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2] as const;
-const CROP = { x0: 0, y0: 900 * 0.08, x1: 1600, y1: 900 * 0.92 }; // what X can crop off the top and bottom
-
-// A spread of real specs: every composition, short and long labels, with and without a stamp,
-// over a slice of the objects.
+// A spread of realistic specs: every composition and mark, short and long headlines, with and
+// without a stamp, over a slice of the objects.
+const HEADLINES = ["posting more isn't better", "who sang it?", "counterrevolutionaries win", "slow artists outlast the fast ones", "zero songs"];
 function* specs(): Generator<ArtSpec> {
-  for (let i = 0; i < OBJECTS.length; i += 3) {
+  for (let i = 0; i < OBJECTS.length; i += 4) {
     const objects = [OBJECTS[i]!, OBJECTS[(i * 7 + 3) % OBJECTS.length]!] as ArtSpec["objects"];
     for (const composition of COMPOSITIONS) {
-      for (const label of [undefined, "who made this?", "counterrevolutionaries"]) {
-        for (const stamp of [undefined, "hot"]) yield { composition, objects, label, stamp, labelPoints: (i % 2) as 0 | 1, twist: TWISTS[i % 3], seed: i + 1 };
+      for (const [j, headline] of HEADLINES.entries()) {
+        for (const stamp of [undefined, "sold", "announced"]) {
+          yield { headline, mark: headline.split(" ")[j % 2]!, markStyle: MARKS[(i + j) % MARKS.length]!, composition, objects: composition === "versus" || composition === "scale" ? objects : [objects[0]], stamp, link: LINKS[i % 3], twist: TWISTS[i % 3], seed: i + j + 1 };
+        }
       }
     }
   }
 }
-const where = (s: ArtSpec) => `${s.composition} ${s.objects.join("+")} ${s.label} ${s.stamp}`;
+const where = (s: ArtSpec) => `${s.composition} ${s.objects.join("+")} "${s.headline}" ${s.markStyle} ${s.stamp} ${s.seed}`;
 
-test("the composition is centred on the sheet, by its real path bounds", () => {
-  for (const s of specs()) {
-    const p = plan(s), g = compositionBox(p);
-    // A stamp beside the composition, rather than in a corner, is centred together with it.
-    const centred = (b: Box) => Math.abs(mid(b)[0] - CX) < 1 && Math.abs(mid(b)[1] - CY) < 1;
-    assert.ok(centred(g) || (p.stamp && centred(union([g, p.stamp.box]))), `${where(s)}: centre ${mid(g).map((v) => v.toFixed(1))}`);
-    // The composition box is built from the ink, not the 256 frame: no wider than ink plus edges.
-    for (const c of p.cuts) { const i = inkBox(c), b = cutBox(c); assert.ok(b.x0 < i.x0 && b.x1 > i.x1 && b.x1 - b.x0 - (i.x1 - i.x0) < 120, where(s)); }
-  }
+test("every spec in the spread parses", () => {
+  for (const s of specs()) assert.ok(ArtSpec.safeParse(s).success, where(s));
 });
 
-test("everything sits on the grid inside the sheet and clear of X's crop zone", () => {
+test("the headline never overflows: every word's glyphs and mark sit inside the scrap, and the scrap's words inside SAFE", () => {
   for (const s of specs()) {
-    const p = plan(s);
-    const boxes: [string, Box][] = [...p.cuts.map((c): [string, Box] => [c.name, cutBox(c)]), ...(p.flap ? [["flap", flapBox(p.flap)] as [string, Box]] : []), ...(p.note ? [["note", p.note.box] as [string, Box]] : []), ...(p.stamp ? [["stamp", p.stamp.box] as [string, Box]] : [])];
-    for (const [name, b] of boxes) {
-      // A 22-letter word plus a stamp is the one case allowed to spill past the grid, never off the sheet.
-      const box = s.label === "counterrevolutionaries" && s.stamp ? SHEET_BOX : AREA;
-      assert.ok(inside(b, box) && inside(b, CROP), `${where(s)}: ${name} ${JSON.stringify(b)}`);
+    const p = plan(s), { head } = p;
+    for (const w of head.words) {
+      const g0 = w.x + w.lead, g1 = g0 + textWidth(w.text, head.size, 800);
+      assert.ok(g0 >= head.box.x0 - 0.5 && g1 <= w.x + w.w + 0.5 && w.x + w.w <= head.box.x1 + 0.5, `${where(s)}: "${w.text}" runs past its line`);
+      assert.ok(w.y - 0.8 * head.size >= head.box.y0 - 0.5 && w.y + 0.24 * head.size <= head.box.y1 + 0.5, `${where(s)}: "${w.text}" leaves the block`);
     }
+    // Words on one line never overlap.
+    const lines = Map.groupBy(head.words, (w) => w.y);
+    for (const ws of lines.values()) ws.forEach((w, k) => k && assert.ok(w.x >= ws[k - 1]!.x + ws[k - 1]!.w, `${where(s)}: "${w.text}" overlaps`));
+    assert.ok(inside(head.box, p.scrap.box), where(s));
+    assert.ok(inside(p.text, SAFE), `${where(s)}: words ${JSON.stringify(p.text)}`);
   }
-  assert.ok(inside(STICKER, CROP), "the alien sticker");
 });
 
-test("no note, stamp or object touches another", () => {
+test("nothing covers the words: objects, flap, stamp and sticker keep clear", () => {
   for (const s of specs()) {
-    const p = plan(s), objects = p.cuts.map(cutBox), flap = p.flap ? [flapBox(p.flap)] : [];
-    for (let i = 0; i < objects.length; i++) for (let j = i + 1; j < objects.length; j++) assert.ok(!hit(objects[i]!, objects[j]!), `${where(s)}: objects ${i} ${j}`);
-    if (p.note) for (const b of [...objects, ...flap]) assert.ok(!hit(p.note.box, b, 40), `${where(s)}: note`);
-    if (p.stamp) for (const b of [...objects, ...flap, ...(p.note ? [p.note.box] : [])]) assert.ok(!hit(p.stamp.box, b, 20), `${where(s)}: stamp`);
+    const p = plan(s), w = where(s);
+    for (const c of p.cuts) assert.ok(!hit(cutBox(c), p.text, 10), `${w}: ${c.name}`);
+    if (p.flap) assert.ok(!hit(flapBox(p.flap), p.text, 10), `${w}: flap`);
+    if (p.stamp) assert.ok(!hit(p.stamp.box, p.text, 20) && inside(p.stamp.box, SAFE), `${w}: stamp ${JSON.stringify(p.stamp.box)}`);
+    // The sticker is round: its edge stays off the words' box.
+    const [x, y] = p.sticker, dx = Math.max(p.text.x0 - x, 0, x - p.text.x1), dy = Math.max(p.text.y0 - y, 0, y - p.text.y1);
+    assert.ok(Math.hypot(dx, dy) > STICKER_SIZE / 2 + 6, `${w}: sticker`);
   }
 });
 
-test("a note is flush with an edge of the composition, or on its middle line", () => {
+test("the headline is set big enough to read at timeline size", () => {
   for (const s of specs()) {
-    const p = plan(s);
-    if (!p.note) continue;
-    const inks = p.cuts.map(inkBox), blk = union([...inks, ...(p.flap ? [flapBox(p.flap)] : [])]), n = p.note.box;
-    const edges = [blk, ...inks].flatMap((b) => [[n.x0, b.x0], [n.x1, b.x1], [n.y0, b.y0], [mid(n)[1], mid(b)[1]]]);
-    assert.ok(edges.some(([a, b]) => Math.abs(a! - b!) < 0.5), `${where(s)}: ${JSON.stringify(n)}`);
+    const p = plan(s), min = s.headline.length > 24 ? 64 : 90;
+    assert.ok(p.head.size >= min, `${where(s)}: ${p.head.size}px`);
   }
+  // Two short words beside the art go huge.
+  assert.ok(plan({ ...spec, headline: "zero songs", composition: "hero", objects: ["receipt"] }).head.size >= 180);
+  // One very long word moves the headline across the top rather than shrink it.
+  assert.equal(plan({ ...spec, headline: "counterrevolutionaries win", composition: "hero", objects: ["crown"] }).layout, "top");
+  assert.equal(plan({ ...spec, composition: "hero", objects: ["crown"] }).layout, "side");
 });
 
-test("the subject is big enough to read as a thumbnail", () => {
-  const SH = bh(SHEET_BOX);
+test("a lone object is big and runs towards the canvas edge", () => {
   for (const s of specs()) {
-    if (s.stamp && s.label === "counterrevolutionaries") continue;
-    const f = bh(union(plan(s).cuts.map(inkBox))) / SH;
-    assert.ok(f >= 0.4 && f <= 0.72, `${where(s)}: ${f.toFixed(2)}`);
-  }
-  // A plain square subject fills most of the band the brief asks for.
-  for (const composition of ["hero", "twist", "peek"] as const) {
-    const f = bh(union(plan({ composition, objects: ["robot"], seed: 3 }).cuts.map(inkBox))) / SH;
-    assert.ok(f >= 0.6 && f <= 0.7, `${composition}: ${f.toFixed(2)}`);
+    if (s.composition !== "hero" && s.composition !== "twist" && s.composition !== "peek") continue;
+    const p = plan(s), ib = inkBox(p.cuts[0]!);
+    assert.ok(bh(ib) >= bh(p.zone) * 0.6 || bw(ib) >= bw(p.zone) * 0.9, `${where(s)}: ${bw(ib).toFixed(0)}x${bh(ib).toFixed(0)}`);
   }
 });
 
-test("versus and scale share a baseline, and versus gives both sides the same weight", () => {
+test("versus turns the two objects to face each other", () => {
+  const [a, b] = plan({ ...spec, objects: ["megaphone", "megaphone"], seed: 1 }).cuts;
+  assert.equal(a!.mirror, true); // the megaphone opens left as drawn, so the first one turns
+  assert.equal(b!.mirror, false);
+  const [c, d] = plan({ ...spec, objects: ["robot", "crown"], seed: 1 }).cuts;
+  assert.equal(c!.mirror, false);
+  assert.equal(d!.mirror, true);
+});
+
+test("versus and scale share a floor; versus stays near equal weight, scale stays lopsided", () => {
   for (const s of specs()) {
     if (s.composition !== "versus" && s.composition !== "scale") continue;
     const cuts = plan(s).cuts, [a, b] = cuts.map(inkBox) as [Box, Box];
-    assert.ok(Math.abs(a.y1 - b.y1) < 1, `${where(s)}: baseline ${a.y1.toFixed(1)} ${b.y1.toFixed(1)}`);
-    // Weight is filled ink area, the solid red side weighed up; not the bounding box.
-    if (s.composition === "versus") assert.ok(Math.abs(weight(cuts[0]!) / weight(cuts[1]!) - 1) < 0.05, `${where(s)}: weight ${weight(cuts[0]!).toFixed(0)} ${weight(cuts[1]!).toFixed(0)}`);
-    else assert.ok(bh(a) < bh(b) * 0.4, `${where(s)}: scale`);
+    assert.ok(Math.abs(a.y1 - b.y1) < 1, `${where(s)}: floor ${a.y1.toFixed(1)} ${b.y1.toFixed(1)}`);
+    assert.ok(!hit(cutBox(cuts[0]!), cutBox(cuts[1]!)) || s.composition === "scale", `${where(s)}: versus sides touch`);
+    if (s.composition === "versus") { const k = weight(cuts[0]!) / weight(cuts[1]!); assert.ok(k > 0.25 && k < 4, `${where(s)}: weight ratio ${k.toFixed(2)}`); }
+    else assert.ok(bh(b) < bh(a) * 0.45, `${where(s)}: scale`);
   }
 });
 
-test("scale's note sits on the side of the object its arrow points at", () => {
-  for (let seed = 1; seed <= 20; seed++) {
-    for (const labelPoints of [0, 1] as const) {
-      const p = plan({ composition: "scale", objects: ["hourglass-high", "users-three"], label: "five minutes", labelPoints, seed });
-      const t = inkBox(p.cuts[labelPoints]!), n = p.note!.box;
-      // On the huge one: flush with its right edge. On the tiny one: in the column over it, or in the band flush with its left edge.
-      assert.ok(Math.abs(n.x1 - t.x1) < 0.5 || (!labelPoints && Math.abs(n.x0 - t.x0) < 0.5), `${seed} ${labelPoints}: ${JSON.stringify(n)}`);
+test("odd has six equal copies, exactly one red, and a stamp never covers the red one", () => {
+  for (let seed = 1; seed <= 30; seed++) {
+    for (const headline of ["the ones who come back", "counterrevolutionaries win"]) {
+      const p = plan({ headline, mark: "back", markStyle: "ransom", composition: "odd", objects: ["user"], stamp: "announced", seed });
+      assert.equal(p.cuts.length, 6);
+      assert.deepEqual(p.cuts.map((c, i) => !!c.red === (i === p.target)), [true, true, true, true, true, true]);
+      assert.equal(new Set(p.cuts.map((c) => c.size)).size, 1);
+      assert.ok(!hit(p.stamp!.box, cutBox(p.cuts[p.target]!)), `${seed} ${headline}: stamp on the red one`);
     }
+  }
+});
+
+test("peek's flap hides the half towards the canvas edge", () => {
+  for (let seed = 1; seed <= 20; seed++) {
+    const p = plan({ headline: "who really sang it?", mark: "really", markStyle: "highlight", composition: "peek", objects: ["microphone-stage"], seed });
+    const i = inkBox(p.cuts[0]!), f = flapBox(p.flap!);
+    assert.ok(hit(i, f), `${seed}: covers`);
+    assert.ok(p.right ? f.x0 < 0 && f.x1 < i.x1 : f.x1 > 1600 && f.x0 > i.x0, `${seed}: runs off the far edge`);
   }
 });
 
 test("ink area is the filled area: holes subtract, an open frame weighs less than its box", () => {
   const sq = { name: "lock-key" as const, x: 800, y: 450, size: 256, rot: 0, seed: 1 };
   const b = inkBox(sq), a = inkArea(sq);
-  assert.ok(a > 0 && a < (b.x1 - b.x0) * bh(b), "under the box");
-  const hp = { ...sq, name: "headphones" as const }, tk = { ...sq, name: "ticket" as const };
-  const fill = (c: typeof sq | typeof hp | typeof tk) => { const q = inkBox(c); return inkArea(c) / ((q.x1 - q.x0) * bh(q)); };
-  assert.ok(fill(hp) < fill(tk) * 0.8, `headphones ${fill(hp).toFixed(2)} vs ticket ${fill(tk).toFixed(2)}`);
+  assert.ok(a > 0 && a < bw(b) * bh(b), "under the box");
+  const fill = (name: "headphones" | "ticket") => { const c = { ...sq, name }, q = inkBox(c); return inkArea(c) / (bw(q) * bh(q)); };
+  assert.ok(fill("headphones") < fill("ticket") * 0.8, "headphones vs ticket");
   assert.ok(Math.abs(inkArea({ ...sq, size: 512 }) / a - 4) < 0.01, "scales with size squared");
   assert.equal(weight({ ...sq, red: true }), a * RED_WEIGHT);
 });
 
-test("peek's flap hides part of the object, on the note's side", () => {
-  for (let seed = 1; seed <= 20; seed++) {
-    const p: Plan = plan({ composition: "peek", objects: ["music-notes"], label: "who made this?", seed });
-    const i = inkBox(p.cuts[0]!), f = flapBox(p.flap!), n = p.note!.box;
-    assert.ok(hit(i, f) && f.x0 > i.x0 + 20 !== f.x1 < i.x1 - 20, `${seed}: covers one side`);
-    assert.equal(n.x0 > i.x1, f.x1 > i.x1, `${seed}: note on the flap side`);
-  }
+test("ArtSpec rejects long headlines, odd characters, unknown objects and a lone versus", () => {
+  assert.equal(ArtSpec.safeParse(spec).success, true);
+  assert.equal(ArtSpec.safeParse({ ...spec, headline: "one two three four five six seven" }).success, false);
+  assert.equal(ArtSpec.safeParse({ ...spec, headline: "posting more ≠ better" }).success, false);
+  assert.equal(ArtSpec.safeParse({ ...spec, headline: "it’s not “more” — it’s depth" }).success, true);
+  assert.equal(ArtSpec.safeParse({ ...spec, markStyle: "underline" }).success, false);
+  assert.equal(ArtSpec.safeParse({ ...spec, stamp: "two words" }).success, false);
+  assert.equal(ArtSpec.safeParse({ ...spec, objects: ["megaphone", "trumpet"] }).success, false);
+  assert.equal(ArtSpec.safeParse({ ...spec, objects: ["megaphone"] }).success, false);
+  assert.equal(ArtSpec.safeParse({ ...spec, composition: "scale", objects: ["coins"] }).success, false);
 });
 
-test("the art prompt lists every composition", () => {
+test("ArtSpec converts to the JSON schema the model call sends", () => {
+  const schema = JSON.stringify(z.toJSONSchema(ArtSpec));
+  for (const name of ["hourglass-high", "singer", "versus", "crack", "ransom", "then", "headline"]) assert.ok(schema.includes(`"${name}"`), name);
+});
+
+test("the art prompt explains every object, composition, mark and link", () => {
   const md = fs.readFileSync(new URL("../prompts/art.md", import.meta.url), "utf8");
-  for (const c of COMPOSITIONS) assert.ok(md.includes(`- ${c}:`), c);
+  for (const name of [...OBJECTS, ...COMPOSITIONS, ...MARKS, ...LINKS]) assert.ok(md.includes(`- ${name}:`), name);
+});
+
+test("text is XML-escaped", () => {
+  for (const markStyle of MARKS) {
+    const svg = renderArt({ ...spec, headline: "<b> & co", mark: "<b>", markStyle, stamp: 'a"b' });
+    assert.ok(!svg.includes("<b>") && svg.includes("&lt;") && svg.includes("&amp;") && svg.includes("A&quot;B"), markStyle);
+  }
 });

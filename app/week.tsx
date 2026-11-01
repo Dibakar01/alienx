@@ -8,6 +8,7 @@
 // a time, and a card dropped on a day chip moves to that day. alienX's suggestions sit under
 // the numbers, and an account short of its week gets one pencilled slot: what alienX would
 // draft there, a tap away. A pencilled slot is a suggestion, never a post, and takes no drops.
+import { useRouter } from "next/navigation";
 import { useLayoutEffect, useRef, useState, useEffect, useTransition } from "react";
 import type { Finding, Post, Topic } from "../lib/db.ts";
 import type { Suggestion } from "../lib/suggest.ts";
@@ -18,6 +19,7 @@ import { Avatar } from "./avatar.tsx";
 import { Mascot } from "./mascot.tsx";
 import { PostDetail } from "./post-detail.tsx";
 import { Stats } from "./studio-stats.tsx";
+import { marksFor, StatusMark } from "./status.tsx";
 import { Suggestions, useSuggestions } from "./studio-suggest.tsx";
 import { ViewTitle } from "./title.tsx";
 
@@ -78,6 +80,7 @@ export function Week({
   onAbout,
   onCreate,
   onDraft,
+  openPost,
 }: {
   accounts: AccountInfo[];
   posts: Post[];
@@ -87,6 +90,7 @@ export function Week({
   onAbout?: () => void;
   onCreate?: () => void;
   onDraft?: (topicId: number) => void; // opens Create and drafts that idea
+  openPost?: { id: number; at: number } | null; // a post to open now (just approved in Create)
 }) {
   // The page is rendered once; a client clock keeps the now line and "next post" moving.
   const [nowMs, setNowMs] = useState(() => Date.parse(now));
@@ -215,6 +219,24 @@ export function Week({
     });
   };
 
+  // A post Create asked to open: opened once it is on hand (a fresh approval can take a
+  // refresh to arrive), each ask only once. An ask already there when the Studio mounts is
+  // an old one, not reopened.
+  const router = useRouter();
+  const opened = useRef(openPost?.at ?? 0);
+  const refreshed = useRef(0);
+  const asked = openPost && opened.current !== openPost.at ? live.find((x) => x.id === openPost.id) : undefined;
+  useEffect(() => {
+    if (!openPost || opened.current === openPost.at) return;
+    if (!asked) {
+      if (refreshed.current !== openPost.at) router.refresh();
+      refreshed.current = openPost.at;
+      return;
+    }
+    opened.current = openPost.at;
+    setOpen(asked);
+  }, [openPost, asked, router]);
+
   // What alienX suggests, and doing it: open the post, draft the idea in Create, or discover ideas.
   const suggestions = useSuggestions(accounts, live, topics, nowMs, today);
   const list = suggestions.list.filter((s) => s.action.type !== "draft" || onDraft);
@@ -257,7 +279,11 @@ export function Week({
         </button>
         <div className="min-w-0">
           <ViewTitle name="Studio" who={solo ? accounts[0]!.name : accounts.length === 3 ? "all three" : "all accounts"} />
-          <p className="text-sm text-snow-muted max-sm:hidden">Tap a post to open it. Drag it to another day.</p>
+          {/* What this page is for. Each mark names itself on hover. */}
+          <p className="flex items-center gap-1.5 text-sm text-snow-muted" title="Drag a post to another day to move it">
+            <CalendarIcon />
+            Your week. Tap a post to send it.
+          </p>
         </div>
         <div className="flex items-center gap-2 max-sm:mt-1.5 max-sm:w-full sm:ml-auto">
           <div className="flex items-center gap-1" role="group" aria-label="Week">
@@ -426,8 +452,9 @@ export function Week({
                             return m;
                           }, new Map<string, string[]>()),
                       ].map(([s, names]) => (
-                        <span key={s} aria-hidden="true" className="pointer-events-none absolute inset-x-0 truncate px-1 pt-0.5 text-[10px] leading-tight text-muted" style={{ top: y(minutes(s)) }}>
-                          {solo ? "open" : `${names.join(", ")} open`} {s}
+                        // Just the time: the band's shading already says it is open.
+                        <span key={s} aria-hidden="true" data-for={names.join(",")} className="pointer-events-none absolute inset-x-0 truncate px-1 pt-0.5 text-[10px] leading-tight text-muted" style={{ top: y(minutes(s)) }}>
+                          {s}
                         </span>
                       ))}
 
@@ -510,8 +537,8 @@ export function Week({
         today={today}
         onClose={() => setOpen(null)}
         onKill={kill}
-        onSaved={(text) => say(text)}
-        onChanged={setOpen}
+        onSaved={(text, undo) => say(text, undo)}
+        onChanged={(p) => setOpen((o) => (o?.id === p.id ? p : o))}
       />
 
       {toast && (
@@ -557,6 +584,8 @@ function Card({
   const dragged = useRef(false);
   const posted = post.status === "posted";
   const due = post.status === "due";
+  const marks = marksFor(post);
+  const state = marks.find((k) => k === "due" || k === "posted" || k === "booked");
   const v = post.art && typeof post.art === "object" && "seed" in post.art ? String((post.art as { seed: number }).seed) : "";
 
   // Arriving in a new cell after a drop: travel from where it was let go.
@@ -593,7 +622,7 @@ function Card({
     <button
       ref={ref}
       type="button"
-      aria-label={`@${post.handle}, ${dayName(day)}, ${due ? "due now" : posted ? "posted" : clock(post.scheduled_at)}${post.picked ? ", alienX pick" : ""}: ${post.posts[0]}`}
+      aria-label={`@${post.handle}, ${dayName(day)}, ${clock(post.scheduled_at)}, ${due ? "due now" : posted ? "posted" : "booked"}${post.picked ? ", alienX pick" : ""}${marks.includes("noart") ? ", no picture yet" : ""}${marks.includes("claims") ? ", claims to check" : ""}: ${post.posts[0]}`}
       onPointerDown={(e) => {
         if (e.button !== 0 || posted) return;
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -666,28 +695,38 @@ function Card({
           {post.art ? (
             <img src={`/api/art?id=${post.id}&v=${v}`} alt="" draggable={false} className="size-full object-cover" />
           ) : (
-            <span className="grid size-full place-items-center text-center text-[9px] leading-tight text-muted">No picture</span>
+            <span role="img" aria-label="No picture yet" title="No picture yet" className="block size-full rounded-[3px] border border-dashed border-strong bg-paper" />
           )}
         </span>
         <span className="flex min-w-0 items-center gap-1 text-xs leading-tight">
-          {who && <Avatar who={who} size={14} />}
-          {due && <span aria-hidden="true" className="size-2 shrink-0 bg-brand" />}
-          <span className={`truncate font-semibold tabular-nums ${due ? "text-brand" : ""}`}>{due ? "Due now" : posted ? "Posted" : clock(post.scheduled_at)}</span>
+          {who && <Avatar who={who} size={14} className="@max-[8.5rem]:hidden" />}
+          {/* The state first, then the time; the rest of the marks at the end of the line. */}
+          {state && <StatusMark kind={state} size={10} />}
+          <span className={`shrink-0 font-semibold tabular-nums ${due ? "text-brand" : ""}`}>{clock(post.scheduled_at)}</span>
+          <span className="ml-auto flex min-w-0 items-center gap-0.5 overflow-hidden">
+            {marks.includes("pick") && <StatusMark kind="pick" size={12} className="text-brand" />}
+            {/* No picture shows as an empty frame where the picture goes; on a card too narrow for one, as a mark. */}
+            {marks.includes("noart") && <StatusMark kind="noart" size={11} className="text-muted @min-[8.5rem]:hidden" />}
+            {marks.includes("claims") && <StatusMark kind="claims" size={11} />}
+          </span>
         </span>
         <span className="truncate font-post text-[11px] leading-snug">{post.posts[0]}</span>
-        {/* Tags: the pick first, so a narrow card never hides it; then what kind of post and what about. */}
+        {/* Tags: what kind of post and what about. */}
         <span className="flex gap-1 overflow-hidden text-[10px] leading-tight whitespace-nowrap">
-          {post.picked ? (
-            <span className="flex shrink-0 items-center gap-0.5 rounded-[4px] bg-brand px-1 py-px font-semibold text-paper">
-              <Mascot className="size-2.5" />
-              alienX pick
-            </span>
-          ) : null}
           {post.angle && <span className="rounded-[4px] bg-wash px-1 py-px font-semibold">{post.angle}</span>}
           {post.pillar && <span className="truncate rounded-[4px] bg-wash px-1 py-px text-muted">{post.pillar}</span>}
-          {!post.picked && !post.angle && !post.pillar && <span className="text-muted">{post.source === "plan" ? "from an idea" : "your idea"}</span>}
+          {!post.angle && !post.pillar && <span className="text-muted">{post.source === "plan" ? "from an idea" : "your idea"}</span>}
         </span>
       </span>
     </button>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <svg viewBox="0 0 14 14" className="size-3.5 shrink-0" aria-hidden="true">
+      <rect x="1.5" y="2.5" width="11" height="10" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M1.5 5.5h11M4.5 1v3M9.5 1v3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
   );
 }

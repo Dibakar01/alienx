@@ -1,5 +1,5 @@
 // npm run tick   one pass: posts whose slot has come turn due and one notification goes out.
-// launchd runs this every minute (com.qalakaar.alienx.tick).
+// launchd runs this every minute (app.alienx.tick).
 import { tick } from "../lib/schedule.ts";
 
 const due = tick();

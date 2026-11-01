@@ -233,6 +233,18 @@
     @apply max-h-[50dvh] w-[min(28rem,calc(100vw-2rem))] overflow-y-auto rounded-card border border-strong bg-paper p-4 text-ink;
   }
 
+  .suggest-anchor {
+    anchor-name: --suggest;
+  }
+  .suggest-pop {
+    position-anchor: --suggest;
+    position-area: bottom span-left;
+    position-try-fallbacks: flip-block;
+    inset: auto;
+    margin: 0.5rem 0 0;
+    @apply max-h-[60dvh] w-[min(26rem,calc(100vw-2rem))] overflow-y-auto rounded-card border border-strong bg-paper p-3 text-ink shadow-object;
+  }
+
   /* An overlay dims the page with warm black and a little blur. */
   dialog::backdrop {
     background: color-mix(in srgb, var(--ground) 60%, transparent);
@@ -650,4 +662,76 @@ dialog[open] > .sheet {
   .v-write .ink, .v-pic .arrow { stroke-dashoffset: 0; }
   .v-find .hot { opacity: 0.85; }
   .v-post .stamp-art { rotate: -6deg; }
+}
+
+/* ---- The idea deck: index cards you flick through. The card in front lies straight, the
+   others keep a slight tilt and turn straight as they arrive (rotate eases on the spring).
+   Skip flicks a card off to the left; new ideas drop onto the deck; drafts are dealt in. ---- */
+.card-slot {
+  transition: rotate var(--dur-spring) var(--spring);
+}
+@keyframes flick {
+  to {
+    opacity: 0;
+    translate: -70% -6%;
+    rotate: -14deg;
+  }
+}
+.flick {
+  animation: flick 0.32s cubic-bezier(0.5, 0, 0.75, 0) forwards;
+}
+@keyframes drop-in {
+  from {
+    opacity: 0;
+    translate: 0 -40px;
+    rotate: -6deg;
+  }
+}
+.drop-in {
+  animation: drop-in var(--dur-spring) var(--spring-bounce) backwards;
+  animation-delay: calc(min(var(--i, 0), 8) * 90ms);
+}
+@keyframes deal {
+  from {
+    opacity: 0;
+    translate: 18px -10px;
+    rotate: 3deg;
+  }
+}
+.deal,
+article.draft-card:not([hidden]) {
+  animation: deal 0.42s var(--spring) backwards;
+}
+.deal-row > * {
+  animation: deal 0.42s var(--spring) backwards;
+  animation-delay: calc(min(var(--i, 0), 8) * 70ms);
+}
+.deck::-webkit-scrollbar {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-slot {
+    transition: none;
+    rotate: none;
+  }
+  .drop-in,
+  .deal,
+  article.draft-card:not([hidden]),
+  .deal-row > * {
+    animation: fade-only 0.2s ease both;
+  }
+  /* A skipped card still leaves: it fades out instead of flicking. */
+  .flick {
+    animation: fade-out 0.2s ease forwards;
+  }
+}
+@keyframes fade-only {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
 }

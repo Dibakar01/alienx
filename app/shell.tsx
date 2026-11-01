@@ -1,20 +1,20 @@
 "use client";
 
-// The whole site, in the order it is used: the landing page (first visit), who is posting,
-// then two views switched by the dock: Create (ideas to an approved post) and Studio (the
+// The whole site, in the order it is used: the front door (what alienX does, and the dial to
+// pick who is posting), then two views switched by the dock: Create (ideas to an approved post) and Studio (the
 // calendar of approved posts, to post from). Nothing scrolls; views stay mounted, so drafts
 // in progress survive a switch.
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { Finding, Post, Topic } from "../lib/db.ts";
+import type { Taste } from "../lib/taste.ts";
 import type { AccountInfo } from "./accounts.tsx";
-import { Activity, startJob } from "./activity.tsx";
+import { Activity, startJob, type Where } from "./activity.tsx";
 import { Avatar } from "./avatar.tsx";
 import Dock from "./bits/Dock.tsx";
 import { Mascot } from "./mascot.tsx";
 import { Profiles } from "./profiles.tsx";
 import { ThemeIcon, useTheme } from "./theme.tsx";
-import { Landing } from "./landing.tsx";
 import { Studio } from "./studio.tsx";
 import { Week } from "./week.tsx";
 
@@ -23,8 +23,6 @@ type View = "write" | "week";
 const VIEWS: View[] = ["write", "week"];
 const STORE = "alienx.view";
 const PROFILE = "alienx.profile";
-// The order the profiles stand in: the brand first, then the founders.
-const ORDER = ["iamqalakaar", "dibakaarr", "anshsarkar_"];
 
 // Each step on the dock: its picture with its name under it, always visible, so the way
 // through reads at a glance and the dock keeps its magnifying motion.
@@ -42,8 +40,6 @@ const STEPS = [
   { n: 1, label: "Create", view: "write", icon: mark("1 Create", "M5 19l1-4L16.5 4.5a2 2 0 0 1 3 3L9 18zM14 7l3 3M5 19h6M19 14v4M17 16h4") },
   { n: 2, label: "Studio", view: "week", icon: mark("2 Studio", "M4 6.5h16v13H4zM4 10.5h16M8.5 4v4M15.5 4v4M8 14h2M12 14h2M16 14h0.5M8 17h2") },
 ] as const;
-// Where a finished job's result lands (see activity.tsx): ideas and drafts are both in Create.
-type Where = "idea" | "drafts" | "week";
 
 // A change of view or profile happens at once; the incoming page slides in with a CSS
 // animation (.page-in, .view). A View Transition was used before, but it freezes the page
@@ -54,39 +50,42 @@ export function Shell({
   accounts,
   posts,
   topics,
+  tastes = {},
   sources,
   now,
 }: {
   accounts: AccountInfo[];
   posts: Post[];
   topics: Topic[];
+  tastes?: Record<string, Taste>;
   sources: Record<number, Finding[]>;
   now: string;
 }) {
   const [view, setView] = useState<View>("write");
   // An idea a Studio suggestion asked Create to draft; `at` makes each ask a new one.
   const [start, setStart] = useState<{ topicId: number; at: number } | null>(null);
-  // A first visit opens on the landing page; "Get started" moves on to choosing who is posting.
-  const [choosing, setChoosing] = useState(false);
-  // The landing page, opened again from the alien mark at the top left.
-  const [about, setAbout] = useState(false);
+  // A post Create asked the Studio to open (just approved); `at` makes each ask a new one.
+  const [openPost, setOpenPost] = useState<{ id: number; at: number } | null>(null);
   // Who is posting: one handle, "all", or nobody yet (the chooser shows). Each device remembers its own.
   const [profile, setProfile] = useState<string | null>(null);
+  const [last, setLast] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [theme, flipTheme] = useTheme();
+  // Where jobs show their progress in place on the Create screen right now (Studio reports it).
+  const [here, setHere] = useState<Where[]>([]);
   const router = useRouter();
-  const ordered = [...accounts].sort((a, b) => (ORDER.indexOf(a.handle) + 1 || 99) - (ORDER.indexOf(b.handle) + 1 || 99));
+  // Already in order: the page sorts them (config/local.json, else the brand first).
+  const ordered = accounts;
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORE) as View | null;
       if (saved && VIEWS.includes(saved)) setView(saved);
-      // The landing page shows once; after "Get started" this device goes straight to the chooser.
-      if (localStorage.getItem("alienx.started")) setChoosing(true);
+      // alienX always opens at the front door, with the dial turned to whoever posted last.
       const who = localStorage.getItem(PROFILE);
-      if (who === "all" || accounts.some((a) => a.handle === who)) setProfile(who);
+      if (who === "all" || accounts.some((a) => a.handle === who)) setLast(who);
     } catch {
-      // No storage: start on the landing page, then the chooser, then Create.
+      // No storage: start at the front door, then Create.
     }
     setReady(true);
     // Once, on load: the minute refresh hands over new account objects and must not re-run this.
@@ -96,8 +95,10 @@ export function Shell({
   const pick = (who: string | null) => {
     turn(() => {
       setProfile(who);
-      // Switching profile goes back to the chooser, not to the landing page.
-      if (!who) setChoosing(true);
+      // Asks left over from the last profile must not replay on the way back in.
+      setOpenPost(null);
+      setStart(null);
+      if (who) setLast(who);
       // A freshly chosen profile starts at the beginning: Create.
       if (who) setView("write");
     });
@@ -111,6 +112,15 @@ export function Shell({
       // Nothing to remember it in.
     }
   };
+
+  // The very first account, made at the front door, is entered straight away.
+  const empty = useRef(accounts.length === 0);
+  useEffect(() => {
+    if (empty.current && accounts.length && !profile) pick(accounts[0]!.handle);
+    empty.current = accounts.length === 0;
+    // Only the account list going from none to some matters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accounts]);
 
   // Slots come due while the page is open, so it fetches fresh data every minute.
   useEffect(() => {
@@ -183,7 +193,7 @@ export function Shell({
   // 1 and 2 on the keyboard switch steps, when nothing is being typed.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
+      const t = e.target instanceof Element ? e.target : null;
       if (!profile || e.metaKey || e.ctrlKey || e.altKey || t?.closest("input, textarea, select, [contenteditable], dialog[open]")) return;
       if (e.key === "1") go("write");
       if (e.key === "2") go("week");
@@ -227,35 +237,14 @@ export function Shell({
       </div>
     );
 
-  if (about)
-    return (
-      <div className="h-dvh overflow-hidden">
-        <div className="page-in h-full">
-          <Landing onStart={() => turn(() => setAbout(false))} cta="Back to alienX" />
-        </div>
-        {themeSwitch}
-      </div>
-    );
+  // The front door: what alienX does, and the dial to pick who is posting.
   if (!profile)
     return (
       <div className="h-dvh overflow-hidden">
         <h1 className="sr-only">alienX</h1>
-        {choosing ? (
-          <div className="page-in h-full">
-          <Profiles accounts={ordered} posts={posts} topics={topics} now={now} onPick={pick} onAbout={() => turn(() => setAbout(true))} />
-          </div>
-        ) : (
-          <Landing
-            onStart={() => {
-              try {
-                localStorage.setItem("alienx.started", "1");
-              } catch {
-                // Shown again next time; harmless.
-              }
-              turn(() => setChoosing(true));
-            }}
-          />
-        )}
+        <div className="page-in h-full">
+          <Profiles accounts={ordered} posts={posts} topics={topics} now={now} last={profile ?? last} onPick={pick} />
+        </div>
         {themeSwitch}
         <Activity />
       </div>
@@ -282,7 +271,8 @@ export function Shell({
           topics={myTopics}
           sources={sources}
           now={now}
-          onAbout={() => turn(() => setAbout(true))}
+          onAbout={() => pick(null)}
+          openPost={openPost}
           onCreate={() => go("write")}
           onDraft={(topicId) => {
             // A suggestion to draft a waiting idea: Create opens and drafts it straight away.
@@ -292,7 +282,21 @@ export function Shell({
         />
       </div>
       <div hidden={view !== "write"} className="view h-full">
-        <Studio key={profile} accounts={mine} topics={myTopics} posts={myPosts} now={now} start={start} onOpenStudio={() => go("week")} onAbout={() => turn(() => setAbout(true))} />
+        <Studio
+          key={profile}
+          accounts={mine}
+          topics={myTopics}
+          tastes={tastes}
+          posts={myPosts}
+          now={now}
+          start={start}
+          onOpenStudio={(id) => {
+            if (id) setOpenPost({ id, at: Date.now() });
+            go("week");
+          }}
+          onAbout={() => pick(null)}
+          onHere={setHere}
+        />
       </div>
       <nav aria-label="Steps">
         <Dock
@@ -309,7 +313,7 @@ export function Shell({
             })),
             { separator: true },
             {
-              // Who is posting; pressing it goes back to the dial.
+              // Who is posting; pressing it goes back to the front door.
               icon: me ? <Avatar who={me} size={34} /> : <span className="text-[0.5em] font-bold">All</span>,
               label: `${me ? me.name : "All accounts"}: switch profile`,
               onClick: () => pick(null),
@@ -318,7 +322,7 @@ export function Shell({
         />
       </nav>
       {themeSwitch}
-      <Activity onGo={goTo} only={profile} />
+      <Activity onGo={goTo} only={profile} here={view === "write" ? here : []} />
     </div>
   );
 }

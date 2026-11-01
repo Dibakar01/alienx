@@ -1,15 +1,16 @@
 "use server";
 
+import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { Account, listAccounts, readAccount, writeAccount } from "../lib/accounts.ts";
+import { Account, listAccounts, readAccount, tags, writeAccount } from "../lib/accounts.ts";
+import { factsPath, startFacts } from "../lib/generate.ts";
 import { readCorpus } from "../lib/corpus.ts";
 import { createPost, decide, getPost, type Post, setTopic, updatePost } from "../lib/db.ts";
 import { ingest } from "../lib/ingest.ts";
 import { heldNear, slotFor } from "../lib/plan.ts";
 import { buildProfile } from "../lib/profile.ts";
-import { moveTo } from "../lib/schedule.ts";
-import { local, ZONE } from "../lib/time.ts";
+import { local, moveTo, zone } from "../lib/schedule.ts";
 
 export type FormState = { ok?: string; error?: string; handle?: string } | null;
 
@@ -70,6 +71,7 @@ const Change = z.discriminatedUnion("do", [
   z.object({ do: z.literal("kill"), id: Id, undo: z.boolean().optional() }),
   z.object({ do: z.literal("restore"), id: Id }),
   z.object({ do: z.literal("posted"), id: Id }),
+  z.object({ do: z.literal("unposted"), id: Id }),
   z.object({ do: z.literal("keep"), id: Id }),
 ]);
 
@@ -82,7 +84,7 @@ export async function changePostAction(input: unknown): Promise<{ post?: Post; e
     let post: Post;
     if (c.do === "move") {
       if (p.status === "posted") throw new Error("That post is already out.");
-      if (c.day < local(now, ZONE).day) throw new Error("Pick today or later.");
+      if (c.day < local(now, zone).day) throw new Error("Pick today or later.");
       const at = moveTo(p.handle, p.scheduled_at, c.day, now, heldNear(p.handle, now, p.id));
       post = updatePost(p.id, { scheduled_at: at.toISOString(), status: "scheduled" });
     } else if (c.do === "edit") {
@@ -90,12 +92,20 @@ export async function changePostAction(input: unknown): Promise<{ post?: Post; e
     } else if (c.do === "kill") {
       if (p.status === "posted") throw new Error("That post is already out.");
       post = updatePost(p.id, { status: "killed" });
-      // Undoing an approval in Create puts its idea back among the ideas.
+      // Undoing an approval in Create puts its idea back among the ideas. Killing alienX's
+      // pick is the person turning its idea down.
       if (c.undo && p.topic_id) setTopic(p.topic_id, "proposed");
+      else if (p.source === "plan" && p.topic_id) setTopic(p.topic_id, "skipped");
     } else if (c.do === "restore") {
       if (p.status !== "killed") throw new Error("That post was not killed.");
       // Undo of a kill: back on the schedule, or straight to due if its slot passed meanwhile.
       post = updatePost(p.id, { status: p.scheduled_at <= now.toISOString() ? "due" : "scheduled" });
+      // And its idea counts as drafted again, as before the kill.
+      if (p.source === "plan" && p.topic_id) setTopic(p.topic_id, "drafted");
+    } else if (c.do === "unposted") {
+      // Undo of "I posted it": back to due, or to the schedule if its slot is still ahead.
+      if (p.status !== "posted") throw new Error("That post is not marked as posted.");
+      post = updatePost(p.id, { status: p.scheduled_at <= now.toISOString() ? "due" : "scheduled", posted_at: null });
     } else if (c.do === "keep") {
       // Yes to alienX's pick: its draft is approved, so it stops asking for a review.
       if (p.draft_id) decide(p.draft_id, "approved", p.posts);
@@ -126,12 +136,14 @@ export async function skipTopicAction(id: unknown): Promise<{ error?: string }> 
 export async function saveAccountAction(_: FormState, form: FormData): Promise<FormState> {
   try {
     const field = (name: string) => String(form.get(name) ?? "").trim();
-    const pillars = field("pillars").split(",").map((p) => p.trim()).filter(Boolean);
+    const pillars = tags(field("pillars"), 6);
+    const style = tags(field("style"), 5);
     const account = Account.parse({
       handle: field("handle").replace(/^@/, ""),
-      display_name: field("display_name"),
-      type: field("type"),
+      display_name: field("display_name").slice(0, 50),
+      type: field("type") || "personal",
       pillars: pillars.length ? pillars : undefined,
+      style: style.length ? style : undefined,
       inherits: field("inherits") || undefined,
       source_url: field("source_url") || undefined,
       x_samples: lines(field("x_samples")),
@@ -139,15 +151,26 @@ export async function saveAccountAction(_: FormState, form: FormData): Promise<F
     const existing = listAccounts();
     if (existing.some((a) => a.handle.toLowerCase() === account.handle.toLowerCase())) throw new Error(`@${account.handle} already exists.`);
     if (account.inherits && !existing.some((a) => a.handle === account.inherits)) throw new Error(`@${account.inherits} is not an account here.`);
-    if (!account.inherits && !account.source_url && !account.x_samples.length) {
-      throw new Error("Nothing to study. Add a URL, past posts, or an account to inherit from.");
+    if (!account.inherits && !account.source_url && !account.x_samples.length && !account.style?.length) {
+      throw new Error("Pick a writing style, or give alienX something to study.");
     }
 
     writeAccount(account);
-    revalidatePath("/", "layout");
-    if (account.source_url) await ingest(account);
-    if (readCorpus(account.handle).length || account.x_samples.length) await buildProfile(account.handle);
-    return { ok: `@${account.handle} is ready.`, handle: account.handle };
+    const h = account.handle;
+    const full = Boolean(field("facts")) && !startFacts(field("facts"), h);
+    const note = full ? ` The facts file is full, so add these facts by hand to ${path.relative(process.cwd(), factsPath())}.` : "";
+    // The page refreshes once the voice is learned (or fails), so the sign-up sheet and its
+    // progress bar stay on screen for the whole wait. The account exists from here, so a
+    // failure still reports it saved: the same handle again would only say it exists.
+    try {
+      if (account.source_url) await ingest(account);
+      if (readCorpus(h).length || account.x_samples.length || account.style?.length) await buildProfile(h);
+    } catch (e) {
+      return { ok: `@${h} saved, but its voice wasn't learned: ${message(e).replace(/\.$/, "")}. Add past posts to try again.${note}`, handle: h };
+    } finally {
+      revalidatePath("/", "layout");
+    }
+    return { ok: `@${h} is ready.${note}`, handle: h };
   } catch (e) {
     return { error: message(e) };
   }

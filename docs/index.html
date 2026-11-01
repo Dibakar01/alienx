@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>alienX</title>
+<meta name="description" content="alienX writes your X. You press post. A free Mac app that runs on your Claude plan.">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cmask id='m'%3E%3Cpath d='M12 2C17.6 2 21 5.4 21 10C21 15.6 16.4 22 12 22C7.6 22 3 15.6 3 10C3 5.4 6.4 2 12 2Z' fill='white'/%3E%3Cpath d='M5.2 9Q9.95 9.12 10.8 13.8Q6.05 13.68 5.2 9Z'/%3E%3Cpath d='M18.8 9Q14.05 9.12 13.2 13.8Q17.95 13.68 18.8 9Z'/%3E%3C/mask%3E%3Crect width='24' height='24' fill='%23D92819' mask='url(%23m)'/%3E%3C/svg%3E">
+<style>
+/* One Flow scrapbook, from app/globals.css: torn paper sheets with tape on a dark ground,
+   one typeface, red only for the one action. */
+@font-face {
+  font-family: "Outfit";
+  src: url("fonts/Outfit.ttf") format("truetype");
+  font-weight: 100 900;
+  font-display: swap;
+}
+:root {
+  color-scheme: dark;
+  --red: #D92819;
+  --red-deep: color-mix(in srgb, var(--red) 80%, var(--black));
+  --white: #FBFAF8;
+  --black: #16130F;
+  --ground: #0C0C0D;
+  --paper: #F4F2F1;
+  --pencil: #5E5852;
+  --tape: rgba(206, 197, 184, 0.72);
+  --snow: #FFFFFF;
+  --grey: color-mix(in srgb, var(--black) 72%, var(--white));
+  --rule: color-mix(in srgb, var(--black) 12%, var(--white));
+  --snow-muted: color-mix(in srgb, var(--snow) 76%, transparent);
+  --snow-line: color-mix(in srgb, var(--snow) 20%, transparent);
+  --shadow: drop-shadow(0 14px 18px rgb(0 0 0 / .32)) drop-shadow(0 2px 3px rgb(0 0 0 / .2));
+  --torn-a: polygon(0.0% 1.2px,2.5% 2.7px,5.0% 1.8px,7.5% 3.0px,10.0% 3.1px,12.5% 0.3px,15.0% 0.1px,17.5% 4.2px,20.0% 1.3px,22.5% 1.2px,25.0% 5.0px,27.5% 2.4px,30.0% 4.2px,32.5% 2.4px,35.0% 3.2px,37.5% 0.8px,40.0% 3.2px,42.5% 4.3px,45.0% 2.6px,47.5% 3.7px,50.0% 3.4px,52.5% 0.3px,55.0% 3.8px,57.5% 3.0px,60.0% 1.5px,62.5% 0.2px,65.0% 4.3px,67.5% 2.4px,70.0% 3.6px,72.5% 4.4px,75.0% 3.6px,77.5% 4.6px,80.0% 2.0px,82.5% 4.0px,85.0% 2.2px,87.5% 4.7px,90.0% 4.4px,92.5% 0.5px,95.0% 0.7px,97.5% 1.1px,100.0% 4.8px,calc(100% - 0.7px) 12.5%,calc(100% - 1.0px) 25.0%,calc(100% - 0.5px) 37.5%,calc(100% - 0.8px) 50.0%,calc(100% - 0.6px) 62.5%,calc(100% - 0.6px) 75.0%,calc(100% - 0.9px) 87.5%,100.0% calc(100% - 2.9px),97.5% calc(100% - 4.5px),95.0% calc(100% - 3.4px),92.5% calc(100% - 4.6px),90.0% calc(100% - 4.3px),87.5% calc(100% - 5.0px),85.0% calc(100% - 3.4px),82.5% calc(100% - 0.8px),80.0% calc(100% - 4.3px),77.5% calc(100% - 4.8px),75.0% calc(100% - 4.5px),72.5% calc(100% - 2.8px),70.0% calc(100% - 3.6px),67.5% calc(100% - 1.1px),65.0% calc(100% - 4.2px),62.5% calc(100% - 2.9px),60.0% calc(100% - 1.4px),57.5% calc(100% - 0.3px),55.0% calc(100% - 4.3px),52.5% calc(100% - 4.9px),50.0% calc(100% - 0.4px),47.5% calc(100% - 4.0px),45.0% calc(100% - 2.1px),42.5% calc(100% - 0.8px),40.0% calc(100% - 1.5px),37.5% calc(100% - 3.8px),35.0% calc(100% - 4.4px),32.5% calc(100% - 0.2px),30.0% calc(100% - 3.1px),27.5% calc(100% - 0.2px),25.0% calc(100% - 3.6px),22.5% calc(100% - 1.7px),20.0% calc(100% - 4.4px),17.5% calc(100% - 4.9px),15.0% calc(100% - 2.5px),12.5% calc(100% - 5.0px),10.0% calc(100% - 1.5px),7.5% calc(100% - 0.4px),5.0% calc(100% - 3.0px),2.5% calc(100% - 0.2px),0.0% calc(100% - 1.0px),0.7px 87.5%,1.0px 75.0%,0.2px 62.5%,0.1px 50.0%,1.4px 37.5%,0.5px 25.0%,1.5px 12.5%);
+  --torn-b: polygon(0.0% 1.6px,2.5% 0.8px,5.0% 3.3px,7.5% 0.4px,10.0% 2.7px,12.5% 1.8px,15.0% 0.3px,17.5% 2.5px,20.0% 0.2px,22.5% 2.2px,25.0% 0.3px,27.5% 0.5px,30.0% 2.1px,32.5% 4.1px,35.0% 0.6px,37.5% 1.1px,40.0% 3.1px,42.5% 4.7px,45.0% 2.9px,47.5% 2.0px,50.0% 4.9px,52.5% 0.2px,55.0% 4.3px,57.5% 1.4px,60.0% 0.7px,62.5% 0.6px,65.0% 1.5px,67.5% 4.1px,70.0% 0.9px,72.5% 2.9px,75.0% 3.2px,77.5% 1.9px,80.0% 2.7px,82.5% 0.3px,85.0% 0.3px,87.5% 1.0px,90.0% 3.4px,92.5% 2.1px,95.0% 1.6px,97.5% 2.9px,100.0% 2.3px,calc(100% - 0.5px) 12.5%,calc(100% - 1.3px) 25.0%,calc(100% - 1.1px) 37.5%,calc(100% - 0.4px) 50.0%,calc(100% - 0.9px) 62.5%,calc(100% - 0.8px) 75.0%,calc(100% - 1.4px) 87.5%,100.0% calc(100% - 3.6px),97.5% calc(100% - 1.4px),95.0% calc(100% - 4.9px),92.5% calc(100% - 0.6px),90.0% calc(100% - 2.1px),87.5% calc(100% - 3.8px),85.0% calc(100% - 0.8px),82.5% calc(100% - 2.4px),80.0% calc(100% - 0.2px),77.5% calc(100% - 3.3px),75.0% calc(100% - 3.8px),72.5% calc(100% - 2.9px),70.0% calc(100% - 4.4px),67.5% calc(100% - 1.6px),65.0% calc(100% - 3.5px),62.5% calc(100% - 3.0px),60.0% calc(100% - 2.9px),57.5% calc(100% - 2.3px),55.0% calc(100% - 4.2px),52.5% calc(100% - 4.7px),50.0% calc(100% - 2.4px),47.5% calc(100% - 3.3px),45.0% calc(100% - 0.3px),42.5% calc(100% - 3.5px),40.0% calc(100% - 3.2px),37.5% calc(100% - 5.0px),35.0% calc(100% - 4.1px),32.5% calc(100% - 1.4px),30.0% calc(100% - 1.9px),27.5% calc(100% - 3.3px),25.0% calc(100% - 0.1px),22.5% calc(100% - 2.3px),20.0% calc(100% - 0.8px),17.5% calc(100% - 0.6px),15.0% calc(100% - 0.3px),12.5% calc(100% - 3.8px),10.0% calc(100% - 0.6px),7.5% calc(100% - 1.2px),5.0% calc(100% - 2.0px),2.5% calc(100% - 4.4px),0.0% calc(100% - 0.4px),0.7px 87.5%,0.9px 75.0%,1.4px 62.5%,1.3px 50.0%,1.4px 37.5%,0.4px 25.0%,0.7px 12.5%);
+  --tape-edge: polygon(0 8%, 6% 0, 12% 10%, 18% 0, 24% 8%, 30% 0, 36% 9%, 42% 0, 48% 8%, 54% 0, 60% 10%, 66% 0, 72% 8%, 78% 0, 84% 9%, 90% 0, 96% 7%, 100% 0, 100% 100%, 94% 92%, 88% 100%, 82% 90%, 76% 100%, 70% 92%, 64% 100%, 58% 90%, 52% 100%, 46% 92%, 40% 100%, 34% 90%, 28% 100%, 22% 92%, 16% 100%, 10% 90%, 4% 100%, 0 92%);
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --ground: color-mix(in srgb, var(--paper) 90%, var(--black));
+    --snow: var(--black);
+    --shadow: drop-shadow(0 10px 16px rgb(0 0 0 / .16)) drop-shadow(0 2px 3px rgb(0 0 0 / .12));
+  }
+}
+* { box-sizing: border-box; }
+html { background: var(--ground); color: var(--snow); font-family: "Outfit", "Helvetica Neue", Helvetica, Arial, sans-serif; accent-color: var(--red); }
+body { margin: 0; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+::selection { background: var(--red); color: var(--white); }
+:focus-visible { outline: 3px solid var(--red); outline-offset: 2px; }
+a { color: inherit; text-underline-offset: 3px; }
+img, svg { display: block; }
+
+.wrap { max-width: 1040px; margin: 0 auto; padding: 20px 16px 56px; display: grid; gap: 40px; }
+header { display: flex; align-items: center; gap: 12px; }
+header .mark { width: 36px; height: 36px; color: var(--red); }
+header b { font-size: 1.15rem; letter-spacing: -0.02em; }
+header a { margin-left: auto; font-size: .9rem; color: var(--snow-muted); }
+
+/* A sheet: the torn edge is a clip-path on a layer behind the content. */
+.sheet { position: relative; isolation: isolate; color: var(--black); color-scheme: light; filter: var(--shadow); rotate: var(--r, 0deg); }
+.sheet::after { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--white); clip-path: var(--torn, var(--torn-a)); }
+.sheet-b { --torn: var(--torn-b); }
+.tape::before { content: ""; position: absolute; top: -11px; left: calc(50% - 46px); width: 92px; height: 24px; z-index: 2; background: var(--tape); rotate: -3deg; clip-path: var(--tape-edge); mix-blend-mode: multiply; pointer-events: none; }
+
+.hero { --r: -0.5deg; padding: 44px 28px 32px; display: grid; gap: 18px; justify-items: start; }
+h1 { margin: 0; font-size: clamp(2.3rem, 7vw, 4.2rem); line-height: 1.04; letter-spacing: -0.04em; font-weight: 700; text-wrap: balance; }
+.pencil-mark { position: relative; display: inline-block; color: var(--red); }
+.pencil-mark svg { position: absolute; left: -3%; bottom: -0.3em; width: 106%; height: 0.45em; overflow: visible; }
+.pencil-mark path { fill: none; stroke: var(--red); stroke-width: 3.5; stroke-linecap: round; stroke-dasharray: 220; stroke-dashoffset: 220; animation: draw .9s cubic-bezier(.22, 1, .36, 1) .25s forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+.lede { margin: 0; max-width: 40rem; font-size: 1.15rem; color: var(--grey); }
+.lede small { display: block; margin-top: 6px; font-size: .95rem; color: var(--pencil); }
+
+.download { display: inline-flex; align-items: center; gap: 12px; margin-top: 6px; padding: 16px 28px; min-height: 56px; border-radius: 12px; background: var(--red); color: var(--white); font-size: 1.2rem; font-weight: 600; text-decoration: none; transition: background-color .15s, translate .3s cubic-bezier(.34, 1.4, .64, 1); }
+.download:hover { background: var(--red-deep); }
+.download:active { translate: 0 1px; transition-duration: .1s; }
+.download svg { width: 22px; height: 22px; }
+
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.steps li { padding: 8px 14px 8px 10px; border: 1.5px dashed color-mix(in srgb, var(--black) 30%, var(--white)); border-radius: 20px; font-weight: 500; }
+.steps b { display: inline-grid; place-items: center; width: 24px; height: 24px; margin-right: 8px; vertical-align: middle; border-radius: 50%; background: var(--black); color: var(--white); font-size: .8rem; }
+.steps span { color: var(--pencil); font-weight: 400; font-size: .9rem; }
+
+.note { margin: 0; max-width: 40rem; font-size: .92rem; color: var(--pencil); padding-left: 12px; border-left: 3px solid var(--rule); }
+.note strong { color: var(--black); font-weight: 600; }
+
+.terminal { display: grid; gap: 10px; max-width: 60rem; }
+.terminal p { margin: 0; color: var(--snow-muted); }
+.cmd { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 16px; border: 1px solid var(--snow-line); border-radius: 12px; }
+.cmd code { flex: 1; min-width: 0; font: 500 .92rem/1.45 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cmd button { flex: none; min-height: 44px; padding: 0 16px; border: 1px solid var(--snow-line); border-radius: 10px; background: transparent; color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
+.cmd button:hover { border-color: var(--snow); }
+
+.shot { --r: 0.6deg; padding: 18px; }
+.shot img { width: 100%; height: auto; border-radius: 6px; border: 1px solid var(--rule); }
+.shot figcaption { padding-top: 10px; font-size: .9rem; color: var(--pencil); }
+
+footer { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: .9rem; color: var(--snow-muted); }
+
+@media (min-width: 720px) {
+  .wrap { padding: 28px 32px 72px; gap: 56px; }
+  .hero { padding: 56px 52px 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet { rotate: none; }
+  .pencil-mark path { animation: none; stroke-dashoffset: 0; }
+  .download { transition: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><mask id="alien"><path d="M12 2C17.6 2 21 5.4 21 10C21 15.6 16.4 22 12 22C7.6 22 3 15.6 3 10C3 5.4 6.4 2 12 2Z" fill="white"/><path d="M5.2 9Q9.95 9.12 10.8 13.8Q6.05 13.68 5.2 9Z"/><path d="M18.8 9Q14.05 9.12 13.2 13.8Q17.95 13.68 18.8 9Z"/></mask><rect width="24" height="24" fill="currentColor" mask="url(#alien)"/></svg>
+    <b>alienX</b>
+    <a href="https://github.com/Dibakar01/alienx">GitHub</a>
+  </header>
+
+  <main class="sheet tape hero">
+    <h1>alienX writes your X. <span class="pencil-mark">You press post.<svg viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true"><path d="M1 6.5C18 4.8 33 7.6 50 5.6S82 3.9 99 5.2"/></svg></span></h1>
+    <p class="lede">It finds ideas, writes in your voice, draws the picture and books the time. Nothing posts until you tap.
+      <small>Runs on your Mac. Free with your Claude plan.</small></p>
+
+    <a class="download" href="download/alienX.zip" download>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>
+      Download for Mac
+    </a>
+
+    <ol class="steps" aria-label="After downloading">
+      <li><b>1</b>Open the zip</li>
+      <li><b>2</b>Double-click alienX</li>
+      <li><b>3</b>Make your account <span>handle, topics, writing style</span></li>
+    </ol>
+
+    <p class="note">First open only: <strong>System Settings → Privacy &amp; Security → Open Anyway</strong>.</p>
+    <p class="note">Needs a Mac with <a href="https://nodejs.org">Node 24+</a>, <a href="https://www.google.com/chrome">Google Chrome</a> and the <a href="https://claude.com/claude-code">Claude Code CLI</a> signed in.</p>
+  </main>
+
+  <section class="terminal">
+    <p>Or paste this in Terminal:</p>
+    <div class="cmd">
+      <code id="cmd">curl -fsSL https://raw.githubusercontent.com/Dibakar01/alienx/main/install.sh | bash</code>
+      <button type="button" id="copy" aria-live="polite">Copy</button>
+    </div>
+  </section>
+
+  <figure class="sheet sheet-b tape shot" style="margin:0">
+    <img src="screenshots/04-studio.png" width="1600" height="1000" loading="lazy" alt="The alienX Studio: a calendar of approved posts, each with its picture and time.">
+    <figcaption>Studio: your calendar. At its time, one tap posts it.</figcaption>
+  </figure>
+
+  <footer>
+    <span>alienX is open source.</span>
+    <a href="https://github.com/Dibakar01/alienx">github.com/Dibakar01/alienx</a>
+  </footer>
+</div>
+<script>
+// Copy button only. Falls back to selecting the line where the clipboard API is missing.
+(function () {
+  var btn = document.getElementById("copy"), code = document.getElementById("cmd");
+  if (!btn || !code) return;
+  btn.addEventListener("click", function () {
+    var done = function () { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = "Copy"; }, 1600); };
+    var select = function () { var s = window.getSelection(); if (s) s.selectAllChildren(code); };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code.textContent).then(done, select);
+      else select();
+    } catch (e) { select(); }
+  });
+})();
+</script>
+</body>
+</html>

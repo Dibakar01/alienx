@@ -62,8 +62,26 @@ export function excerpts(seed: string, corpus: Article[], max = 5, min = 3): { t
   return picked.map(({ text, url }) => ({ text, url }));
 }
 
-// The company facts: the only source for anything said about Qalakaar.
-export const facts = () => fs.readFileSync(path.join(process.cwd(), "knowledge", "qalakaar-facts.md"), "utf8").trim();
+// The facts: the only source for anything said about the accounts and their company.
+// knowledge/facts.md, or the older qalakaar-facts.md name on installs that already have one.
+const KNOWLEDGE = path.join(process.cwd(), "knowledge");
+export const factsPath = () => ["facts.md", "qalakaar-facts.md"].map((f) => path.join(KNOWLEDGE, f)).find((f) => fs.existsSync(/*turbopackIgnore: true*/ f)) ?? path.join(KNOWLEDGE, "facts.md");
+export const facts = () => (fs.existsSync(/*turbopackIgnore: true*/ factsPath()) ? fs.readFileSync(/*turbopackIgnore: true*/ factsPath(), "utf8").trim() : "") || "(No facts given. Say nothing about the account's company, people, events or plans beyond the seed.)";
+
+// Facts typed at sign-up go into the facts file under the account's handle, starting the file
+// if there is none. Nothing already there is changed; the file stays under 20,000 characters.
+// False when nothing was written (no facts, or the file is full).
+export function startFacts(text: string, handle: string): boolean {
+  const body = text.replace(/\r/g, "").trim().slice(0, 4000);
+  if (!body) return false;
+  const file = factsPath();
+  const had = fs.existsSync(/*turbopackIgnore: true*/ file) ? fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8").trimEnd() : "";
+  const add = `${had ? "\n\n" : "# Facts alienX may state\n\n"}## @${handle}\n\n${body}\n`;
+  if (had.length + add.length > 20_000) return false;
+  fs.mkdirSync(/*turbopackIgnore: true*/ KNOWLEDGE, { recursive: true });
+  fs.writeFileSync(/*turbopackIgnore: true*/ file, had + add);
+  return true;
+}
 
 // The voice an account writes in: its own profile, or its parent's with the account's layer on top.
 export function voice(account: Account) {
