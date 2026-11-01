@@ -8,7 +8,8 @@ import { claudeCommand } from "./platform.ts";
 // Loads prompts/{name}.md and fills its {{slots}}. The file holds the system prompt,
 // a line of five equals signs, then the user message. Prompt text lives there, never here.
 export function prompt(name: string, vars: Record<string, string>): { system: string; user: string } {
-  const template = fs.readFileSync(path.join(process.cwd(), "prompts", `${name}.md`), "utf8");
+  // Line endings are made \n first: a Windows checkout or editor may have saved \r\n.
+  const template = fs.readFileSync(path.join(process.cwd(), "prompts", `${name}.md`), "utf8").replace(/\r\n/g, "\n");
   const [system, user] = template.split("\n=====\n").map((part) =>
     part
       .replace(/\{\{(\w+)\}\}/g, (_, key: string) => {

@@ -25,7 +25,7 @@ export function readCorpus(handle: string): Article[] {
     .filter((f) => f.endsWith(".md"))
     .sort()
     .map((f) => {
-      const raw = fs.readFileSync(path.join(dir(handle), f), "utf8");
+      const raw = fs.readFileSync(path.join(dir(handle), f), "utf8").replace(/\r\n/g, "\n");
       const m = raw.match(/^---\ntitle: (.*)\nurl: (.*)\ndate: (.*)\n---\n\n([\s\S]*)$/);
       if (!m) throw new Error(`Bad frontmatter in corpus/${handle}/${f}`);
       return { title: JSON.parse(m[1]!), url: m[2]!, date: m[3]!, body: m[4]!.trimEnd() };

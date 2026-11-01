@@ -64,3 +64,20 @@ test("a voice can be built from picked style and topics alone", () => {
   assert.match(user, /<chosen_style>\nWitty, Short lines\n<\/chosen_style>/);
   assert.match(user, /<chosen_topics>\nFilm, AI\n<\/chosen_topics>/);
 });
+
+test("a prompt saved with Windows line endings still splits into its two parts", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "alienx-crlf-"));
+  fs.mkdirSync(path.join(dir, "prompts"));
+  fs.writeFileSync(path.join(dir, "prompts", "t.md"), "System {{a}}\r\n=====\r\nUser {{a}}\r\n");
+  const cwd = process.cwd();
+  process.chdir(dir);
+  try {
+    assert.deepEqual(prompt("t", { a: "x" }), { system: "System x", user: "User x" });
+  } finally {
+    process.chdir(cwd);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
